@@ -4,6 +4,8 @@
 
 module Language.Materialization.Core where
 
+import Data.String
+
 import Text.PrettyPrint.Annotated
 import Language.Common.Pretty (Pretty(..))
 
@@ -15,12 +17,8 @@ instance Pretty Program where
 
 -- | Clauses are purely side-effecting statements, typically targeting a single name.
 data Clause
-  -- | Initialize a name from a value expression.
-  = Initialization Name ValueExpression
-
-  -- | Materialize a name from data stored under another, either directly, or through function
-  -- application.
-  | Materialization Name NameExpression Method
+  -- | Assignment
+  = Assignment LeftExpression RightExpression
 
   -- | Synchronize the contents of a name.
   | Synchronization Name
@@ -31,71 +29,82 @@ data Clause
 
 instance Pretty Clause where
   pretty c = case c of
-    Initialization name vexpr -> pretty name <+> "=" <+> pretty vexpr
-    Materialization name lexpr m -> pretty name <+> "<" <> pretty m <> "-" <+> pretty lexpr
+    Assignment lExpr rExpr -> pretty lExpr <+> "=" <+> pretty rExpr
     Synchronization name -> pretty name <> "?"
     Return -> "!"
 
--- | Expressions resulting in names.
-data NameExpression
-  -- | Just a plain name.
-  = PrimitiveName Name
-
-  -- | An application of a closure stored under one name to an argument stored under another,
-  -- materializing the formal parameter by the designated materialization method.
-  | Application Name Name Method
+-- | An expression which may appear on the left-hand side of an assignment.
+data LeftExpression = Unqualified Name | Qualified LeftExpression Name
  deriving (Eq, Ord, Read, Show)
 
-instance Pretty NameExpression where
-  pretty nexpr = case nexpr of
-    PrimitiveName name -> pretty name
-    Application fName xName m -> pretty fName <+> parens (pretty m) <+> pretty xName
+instance Pretty LeftExpression where
+  pretty lExpr = case lExpr of
+    Unqualified n -> pretty n
+    Qualified lExpr' n -> pretty lExpr' <> "." <> pretty n
 
--- | Expressions resulting in values.
-data ValueExpression
-  -- | Just a plain value.
-  = AtomValue
-  | BlobValue
+-- | An expression which may appear on the right-hand side of an assignment.
+data RightExpression
+  -- | Plain values, wrapped with an intent on how to transfer resources.
+  = BidExpression Bid
 
-  -- | A capture expression; a data constructor with a designated capture specification.
-  | CapturingVExpr CaptureExpression
+  -- | Function application.
+  | Application LeftExpression Bid
+
+  -- | Expressions which necessarily create new values.
+  | LiteralExpression Literal
  deriving (Eq, Ord, Read, Show)
 
-instance Pretty ValueExpression where
-  pretty vexpr = case vexpr of
-    AtomValue -> "a"
-    BlobValue -> "b"
-    CapturingVExpr c -> pretty c
+instance Pretty RightExpression where
+  pretty rExpr = case rExpr of
+    BidExpression b -> pretty b
+    Application lExpr b -> pretty lExpr <+> pretty b
+    LiteralExpression literal -> pretty literal
 
--- | Expressions which make use of captured names; typically data constructors such as functions.
-data CaptureExpression
-  -- | Function abstractions, with a formal parameter, body and return parameter.
-  = CaptureExpression CaptureSpec DataConstructor
+-- | Bids convey an intent to transfer resources.
+data Bid = Bid LeftExpression BidType
  deriving (Eq, Ord, Read, Show)
 
-instance Pretty CaptureExpression where
-  pretty (CaptureExpression cSpec dCon) = "\\" <> pretty cSpec <> "." $+$ pretty dCon
+instance Pretty Bid where
+  pretty (Bid lExpr bType) = parens (pretty lExpr <+> "*" <+> pretty bType)
+
+-- | Literal values, categorized by memory characteristics.
+data Literal
+  -- | Small literals only have a stack component.
+  = SmallLiteral
+
+  -- | Large literals have a stack and a heap component.
+  | LargeLiteral
+
+  -- | Capturing literals (really only functions) have only a stack component to themselves (a code
+  -- pointer), but also have a number of dependents, which may be any kind of value.
+  | CaptureExpression CaptureSpec Abstraction
+ deriving (Eq, Ord, Read, Show)
+
+instance Pretty Literal where
+  pretty literal = case literal of
+    SmallLiteral -> "a"
+    LargeLiteral -> "b"
+    CaptureExpression cSpec abstraction -> "\\" <> pretty cSpec <> "." <+> pretty abstraction
+
+data Abstraction = Abstraction Name Program RightExpression
+ deriving (Eq, Ord, Read, Show)
+
+instance Pretty Abstraction where
+  pretty (Abstraction name body right) = "\\" <> pretty name <> "." <+> pretty body <+> "->" <+> pretty right
 
 -- | Specification of how names are captured -- their names on the inside and the outside, as well
 -- as the materialization method used.
-newtype CaptureSpec = CaptureSpec [(Name, Name, Method)]
- deriving (Eq, Ord, Read, Show)
+type CaptureSpec = [(Name, Bid)]
 
 instance Pretty CaptureSpec where
-  pretty (CaptureSpec cSpec) = brackets $ hsep $ punctuate comma $ map prettyCapture cSpec
-   where prettyCapture (iName, oName, m) = pretty iName <+> "<" <> pretty m <> "-" <+> pretty oName
-
-data DataConstructor = Abstraction Name Program Name
- deriving (Eq, Ord, Read, Show)
-
-instance Pretty DataConstructor where
-  pretty (Abstraction xName pBody rName) = "\\" <> pretty xName <> "." $+$ pretty pBody <+> "~>" <+> pretty rName
+  pretty cSpec = brackets $ hsep $ punctuate comma $ map prettyCapture cSpec
+   where prettyCapture (iName, bid) = pretty (Assignment (Unqualified iName) (BidExpression bid))
 
 -- | Methods of materialization.
-data Method = Copy | Move | Refr
+data BidType = Copy | Move | Refr
  deriving (Eq, Ord, Read, Show)
 
-instance Pretty Method where
+instance Pretty BidType where
   pretty m = case m of
     Copy -> "C"
     Move -> "M"
@@ -107,6 +116,9 @@ newtype Name = Name String
 
 instance Pretty Name where
   pretty (Name n) = text n
+
+instance IsString Name where
+  fromString = Name
 
 -- | Types serve to distinguish between small values, big values and closure values.
 data Type = AtomType | BlobType | ClosureType Type Type CaptureType
