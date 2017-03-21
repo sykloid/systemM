@@ -4,10 +4,9 @@ import Control.Monad (void)
 
 import Text.Megaparsec
 
-import qualified Text.Megaparsec.Lexer as L
-
 import Text.Megaparsec.String
 
+import Language.Common.Parser
 import Language.Materialization.Core
 
 -- Runners
@@ -17,16 +16,7 @@ runProgramParser input = case runParser program "<input>" input of
   Left parseError -> error $ parseErrorPretty parseError
   Right p -> p
 
--- Lexing
-
-spaceConsumer :: Parser ()
-spaceConsumer = L.space (void spaceChar) (L.skipLineComment "#") (return ())
-
-lexeme :: Parser a -> Parser a
-lexeme = L.lexeme space
-
-lambda :: Parser Char
-lambda = lexeme $ oneOf "\\"
+-- Lexers
 
 comma :: Parser Char
 comma = lexeme $ char ','
@@ -37,87 +27,78 @@ semi = lexeme $ char ';'
 -- Parsing
 
 program :: Parser Program
-program = do
-  body <- block
-  void $ lexeme (string "~>")
-  returnLoc <- location
-  return (Program body returnLoc)
-
-block :: Parser Block
-block = Block <$> between (lexeme $ char '{') (lexeme $ char '}') (sepEndBy clause semi)
+program = sepEndBy clause semi
 
 clause :: Parser Clause
-clause = (allocate <|> try initialize <|> try materialize <|> deallocate)
+clause = try pAssignment <|> try pSynchronization <|> try pReturn
  where
-  allocate = (lexeme $ char '+') >> Allocate <$> location
-  initialize = do
-    loc <- location
-    void $ lexeme (char '=')
-    vexpr <- valueExpression
-    return (Initialize loc vexpr)
-  materialize = do
-    loc <- location
-    m <- mgets
-    lexpr <- locationExpression
-    return (Materialize loc lexpr m)
-  deallocate = (lexeme $ char '-') >> Allocate <$> location
+  pAssignment = do
+    lExpr <- leftExpression
+    void (lexeme $ char '=')
+    rExpr <- rightExpression
+    return (Assignment lExpr rExpr)
+  pSynchronization = do
+    n <- name
+    void $ lexeme (char '?')
+    return (Synchronization n)
+  pReturn = lexeme (char '!') >> return Return
 
-valueExpression :: Parser ValueExpression
-valueExpression = vPrimitive <|> abstraction
+leftExpression :: Parser LeftExpression
+leftExpression = sepBy1 name (lexeme $ char '.') >>= \(uqn:qns) ->
+  return $ if null qns then Unqualified uqn else foldl Qualified (Unqualified uqn) qns
+
+rightExpression :: Parser RightExpression
+rightExpression = bidExpression <|> literalExpression <|> application
  where
-  vPrimitive = VPrimitive <$> value
-  abstraction = do
-    void $ lexeme lambda
-    fLoc <- location
-    cSpec <- closureSpec
-    body <- program
-    return (Abstraction fLoc cSpec body)
+  bidExpression = BidExpression <$> bid <?> "Bid"
+  application = Application <$> leftExpression <*> bid
+  literalExpression = LiteralExpression <$> literal
 
-locationExpression :: Parser LocationExpression
-locationExpression = lPrimitive <|> application
+literal :: Parser Literal
+literal = smallLiteral <|> largeLiteral <|> captureExpression
  where
-   lPrimitive = LPrimitive <$> location
-   application = do
-     fLoc <- location
-     m <- mapply
-     xLoc <- location
-     return $ Application fLoc xLoc m
+  smallLiteral = lexeme (string "small") *> pure SmallLiteral
+  largeLiteral = lexeme (string "large") *> pure LargeLiteral
+  captureExpression = do
+    void $ lexeme (char '\\')
+    cSpec <- captureSpec
+    void $ optional (lexeme $ char '.')
+    f <- abstraction
+    return (CaptureExpression cSpec f)
 
-closureSpec :: Parser CaptureSpec
-closureSpec = CaptureSpec <$> between (lexeme $ char '[') (lexeme $ char ']') (sepEndBy captureSpec comma)
+abstraction :: Parser Abstraction
+abstraction = do
+  void $ lexeme (char '\\')
+  formalArg <- name
+  void $ optional (lexeme $ char '.')
+  body <- between (lexeme $ char '{') (lexeme $ char '}') program
+  void $ lexeme (string "->")
+  rt <- rightExpression
+  return (Abstraction formalArg body rt)
+
+bid :: Parser Bid
+bid = between (lexeme $ char '(') (lexeme $ char ')') $ do
+  lExpr <- leftExpression
+  void (lexeme $ char '*')
+  bt <- bidType
+  return (Bid lExpr bt)
+
+captureSpec :: Parser CaptureSpec
+captureSpec = between (lexeme $ char '[') (lexeme $ char ']') (sepEndBy captureSpec1 comma)
  where
-  captureSpec :: Parser (Location, Location, Method)
-  captureSpec = do
-    iLoc <- location
-    m <- mgets
-    oLoc <- location
-    return (iLoc, oLoc, m)
+  captureSpec1 :: Parser (Name, Bid)
+  captureSpec1 = do
+    iName <- name
+    void (lexeme $ char '=')
+    b <- bid
+    return (iName, b)
 
-method :: Parser Method
-method = oneOf "CMR" >>= \m -> return $ case m of
+bidType :: Parser BidType
+bidType = oneOf "CMR" >>= \m -> return $ case m of
   'C' -> Copy
   'M' -> Move
   'R' -> Refr
   _ -> error "unreachable"
 
-location :: Parser Location
-location = Location <$> lexeme (some alphaNumChar)
-
-value :: Parser Value
-value = atom <|> closure
- where
-  atom = string "atom" *> pure Atom
-  closure = do
-    void lambda
-    xLoc <- location
-    cLocs <- between (lexeme $ char '[') (lexeme $ char ']') (sepEndBy location comma)
-    body <- program
-    return (Closure xLoc (ClosureSpec cLocs) body)
-
--- Helpers
-
-mgets :: Parser Method
-mgets = lexeme (char '<' *> method <* char '-')
-
-mapply :: Parser Method
-mapply = lexeme (between (char '(') (char ')') method)
+name :: Parser Name
+name = Name <$> lexeme (some alphaNumChar)
