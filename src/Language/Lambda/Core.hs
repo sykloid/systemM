@@ -1,7 +1,5 @@
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ViewPatterns #-}
 
 module Language.Lambda.Core (
   Expression(..),
@@ -15,6 +13,7 @@ import Control.Monad.State.Strict
 
 import qualified Data.List as L
 
+import Language.Common
 import Language.Common.Pretty
 
 import qualified Language.Materialization.Core as M
@@ -24,12 +23,6 @@ data Expression
   | Application Expression Expression
   | Abstraction String Expression
  deriving (Eq, Ord, Read, Show)
-
-lambdaChars :: [String]
-lambdaChars = ["λ", "\\"]
-
-arrowChars :: [String]
-arrowChars = ["->", "."]
 
 instance Pretty Expression where
   pretty e = case e of
@@ -45,28 +38,29 @@ instance Pretty Expression where
       in pf <+> px
     Abstraction x b -> text (head lambdaChars) <> text x <+> text (head arrowChars) <+> pretty b
 
-toSystemM :: Expression -> M.Program
-toSystemM expr = flip evalState (0 :: Int) $ do
-  (body, result) <- recursiveToSystemM expr
-  return $ M.Program (M.Block body) result
+toSystemM :: Expression -> (M.Program, M.LeftExpression)
+toSystemM expr = flip evalState (0 :: Int) $ recursiveToSystemM expr
  where
    recursiveToSystemM e = case e of
-     Term i -> return ([], (M.Location i))
+     Term i -> return ([], M.Unqualified $ M.Name i)
      Application f x -> do
-       result <- genSym
-       (mfp, mfv) <- recursiveToSystemM f
-       (mxp, mxv) <- recursiveToSystemM x
-       return (mfp ++ mxp ++ [M.Materialize result (M.Application mfv mxv M.Copy) M.Copy], result)
+       result <- M.Unqualified <$> genSym
+       (mfp, mfl) <- recursiveToSystemM f
+       (mxp, mxl) <- recursiveToSystemM x
+       return (mfp ++ mxp ++ [M.Assignment result (M.Application mfl (M.Bid mxl M.Copy))], result)
      Abstraction x b -> do
-       (mep, mev) <- recursiveToSystemM b
-       let captureSpec = M.CaptureSpec [(M.Location inside, M.Location inside, M.Copy) | inside <- L.delete x (freeVars b)]
-       fLoc <- genSym
-       return ([M.Initialize fLoc (M.Abstraction (M.Location x) captureSpec (M.Program (M.Block mep) mev))], fLoc)
+       (mep, mel) <- recursiveToSystemM b
+       let captureSpec = [(M.Name inside, M.Bid (M.Unqualified $ M.Name inside) M.Copy) | inside <- L.delete x (freeVars b)]
+       fName <- M.Unqualified <$> genSym
+       return ([M.Assignment fName $
+                  M.LiteralExpression (
+                   M.CaptureExpression captureSpec (M.Abstraction (M.Name x) mep (M.BidExpression (M.Bid mel M.Copy))))]
+              , fName)
     where
       genSym = do
         i <- get
         modify succ
-        return $ M.Location $ "_" ++ show i
+        return $ M.Name $ "_" ++ show i
 
       freeVars :: Expression -> [String]
       freeVars (Term i) = [i]
