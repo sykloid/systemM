@@ -30,3 +30,17 @@ library
                        pretty
   default-language:    Haskell2010
 
+test-suite test
+  default-language: Haskell2010
+  type: exitcode-stdio-1.0
+  hs-source-dirs: tests
+  main-is: Test.hs
+  other-modules: Language.Lambda.Tests
+                 Language.Lambda.Parser.Tests
+                 Language.Materialization.Tests
+                 Language.Materialization.Parser.Tests
+  build-depends: base >= 4.7 && < 5,
+                 megaparsec,
+                 systemM,
+                 tasty,
+                 tasty-hunit
