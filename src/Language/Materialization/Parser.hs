@@ -16,14 +16,6 @@ runProgramParser input = case runParser program "<input>" input of
   Left parseError -> error $ parseErrorPretty parseError
   Right p -> p
 
--- Lexers
-
-comma :: Parser Char
-comma = lexeme $ char ','
-
-semi :: Parser Char
-semi = lexeme $ char ';'
-
 -- Parsing
 
 program :: Parser Program

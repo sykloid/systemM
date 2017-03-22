@@ -6,7 +6,7 @@ import Text.Megaparsec
 import Text.Megaparsec.Expr
 import Text.Megaparsec.String
 
-import qualified Text.Megaparsec.Lexer as L
+import Language.Common.Parser
 
 import Language.Lambda.Core
 
@@ -19,18 +19,6 @@ runExpressionParser input = case runParser expression "<input>" input of
 
 -- Lexing
 
-spaceConsumer :: Parser ()
-spaceConsumer = L.space (void spaceChar) (L.skipLineComment "#") (return ())
-
-lexeme :: Parser a -> Parser a
-lexeme = L.lexeme space
-
-lambda :: Parser String
-lambda = lexeme $ choice $ map string lambdaChars
-
-arrow :: Parser String
-arrow = lexeme $ choice $ map string arrowChars
-
 -- Parsing
 
 expression :: Parser Expression
@@ -39,7 +27,7 @@ expression = makeExprParser nonApp [[appOp]]
   appOp = InfixL $ return Application
 
   nonApp :: Parser Expression
-  nonApp = lexeme $ term <|> abstraction <|> (between (lexeme $ char '(') (lexeme $ char ')') nonApp)
+  nonApp = lexeme $ term <|> abstraction <|> (between (lexeme $ char '(') (lexeme $ char ')') expression)
 
   term :: Parser Expression
   term = Term <$> some alphaNumChar
