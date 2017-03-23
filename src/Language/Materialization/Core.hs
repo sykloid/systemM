@@ -21,7 +21,7 @@ data Clause
   = Assignment LeftExpression RightExpression
 
   -- | Synchronize the contents of a name.
-  | Synchronization Name
+  | Synchronization LeftExpression
 
   -- | Return from a function application, performing all necessary clean-up activities.
   | Return
@@ -30,7 +30,7 @@ data Clause
 instance Pretty Clause where
   pretty c = case c of
     Assignment lExpr rExpr -> pretty lExpr <+> "=" <+> pretty rExpr
-    Synchronization name -> pretty name <> "?"
+    Synchronization lExpr -> pretty lExpr <> "?"
     Return -> "!"
 
 -- | An expression which may appear on the left-hand side of an assignment.
