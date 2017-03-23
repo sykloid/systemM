@@ -30,9 +30,9 @@ clause = try pAssignment <|> try pSynchronization <|> try pReturn
     rExpr <- rightExpression
     return (Assignment lExpr rExpr)
   pSynchronization = do
-    n <- name
+    lExpr <- leftExpression
     void $ lexeme (char '?')
-    return (Synchronization n)
+    return (Synchronization lExpr)
   pReturn = lexeme (char '!') >> return Return
 
 leftExpression :: Parser LeftExpression
