@@ -123,20 +123,4 @@ instance Pretty Name where
 instance IsString Name where
   fromString = Name
 
--- | Types serve to distinguish between small values, big values and closure values.
-data Type = AtomType | BlobType | ClosureType Type Type CaptureType
- deriving (Eq, Ord, Read, Show)
 
-instance Pretty Type where
-  pretty t = case t of
-    AtomType -> "A"
-    BlobType -> "B"
-    ClosureType ta tb tc -> pretty ta <+> "-" <> pretty tc <> ">" <+> pretty tb
-
--- | The type of a capture is the set of associations between captured names (on the inside of a
--- captured value) and their corresponding types.
-type CaptureType = [(Name, Type)]
-
-instance Pretty CaptureType where
-  pretty nts = brackets $ hsep $ punctuate comma $ map prettyCaptureType nts
-   where prettyCaptureType (n, t) = pretty n <> colon <+> pretty t
