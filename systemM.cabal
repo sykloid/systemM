@@ -23,10 +23,12 @@ library
                        Language.Lambda.Core,
                        Language.Lambda.Parser,
                        Language.Materialization.Core,
-                       Language.Materialization.Parser
+                       Language.Materialization.Interpreter,
                        Language.Materialization.Parser,
                        Language.Materialization.Quoter
   build-depends:       base >= 4.7 && < 5,
+                       containers,
+                       errors,
                        megaparsec,
                        mtl,
                        pretty,
@@ -41,8 +43,9 @@ test-suite test
   main-is: Test.hs
   other-modules: Language.Lambda.Tests
                  Language.Lambda.Parser.Tests
-                 Language.Materialization.Tests
+                 Language.Materialization.Interpreter.Tests
                  Language.Materialization.Parser.Tests
+                 Language.Materialization.Tests
   build-depends: base >= 4.7 && < 5,
                  megaparsec,
                  systemM,
