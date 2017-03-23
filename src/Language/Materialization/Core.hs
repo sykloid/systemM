@@ -1,12 +1,15 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
 module Language.Materialization.Core where
 
+import Data.Data
 import Data.String
 
 import Text.PrettyPrint.Annotated
+
 import Language.Common.Pretty (Pretty(..))
 
 -- | Programs are sequences of clauses, parameterized by a name type.
@@ -25,7 +28,7 @@ data Clause
 
   -- | Return from a function application, performing all necessary clean-up activities.
   | Return
- deriving (Eq, Ord, Read, Show)
+ deriving (Data, Eq, Ord, Read, Show, Typeable)
 
 instance Pretty Clause where
   pretty c = case c of
@@ -35,7 +38,7 @@ instance Pretty Clause where
 
 -- | An expression which may appear on the left-hand side of an assignment.
 data LeftExpression = Unqualified Name | Qualified LeftExpression Name
- deriving (Eq, Ord, Read, Show)
+ deriving (Data, Eq, Ord, Read, Show, Typeable)
 
 instance Pretty LeftExpression where
   pretty lExpr = case lExpr of
@@ -52,7 +55,7 @@ data RightExpression
 
   -- | Expressions which necessarily create new values.
   | LiteralExpression Literal
- deriving (Eq, Ord, Read, Show)
+ deriving (Data, Eq, Ord, Read, Show, Typeable)
 
 instance Pretty RightExpression where
   pretty rExpr = case rExpr of
@@ -62,7 +65,7 @@ instance Pretty RightExpression where
 
 -- | Bids convey an intent to transfer resources.
 data Bid = Bid LeftExpression BidType
- deriving (Eq, Ord, Read, Show)
+ deriving (Data, Eq, Ord, Read, Show, Typeable)
 
 instance Pretty Bid where
   pretty (Bid lExpr bType) = parens (pretty lExpr <+> "*" <+> pretty bType)
@@ -78,7 +81,7 @@ data Literal
   -- | Capturing literals (really only functions) have only a stack component to themselves (a code
   -- pointer), but also have a number of dependents, which may be any kind of value.
   | CaptureExpression CaptureSpec Abstraction
- deriving (Eq, Ord, Read, Show)
+ deriving (Data, Eq, Ord, Read, Show, Typeable)
 
 instance Pretty Literal where
   pretty literal = case literal of
@@ -87,7 +90,7 @@ instance Pretty Literal where
     CaptureExpression cSpec abstraction -> "\\" <> pretty cSpec <> "." <+> pretty abstraction
 
 data Abstraction = Abstraction Name Program RightExpression
- deriving (Eq, Ord, Read, Show)
+ deriving (Data, Eq, Ord, Read, Show, Typeable)
 
 instance Pretty Abstraction where
   pretty (Abstraction name body right) = "\\" <> pretty name <> "." <+> pretty body <+> "->" <+> pretty right
@@ -102,7 +105,7 @@ instance Pretty CaptureSpec where
 
 -- | Methods of materialization.
 data BidType = Copy | Move | Refr
- deriving (Eq, Ord, Read, Show)
+ deriving (Data, Eq, Ord, Read, Show, Typeable)
 
 instance Pretty BidType where
   pretty m = case m of
@@ -112,7 +115,7 @@ instance Pretty BidType where
 
 -- | Program-level names.
 newtype Name = Name String
- deriving (Eq, Ord, Read, Show)
+ deriving (Data, Eq, Ord, Read, Show, Typeable)
 
 instance Pretty Name where
   pretty (Name n) = text n
