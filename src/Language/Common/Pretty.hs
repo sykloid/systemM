@@ -1,4 +1,4 @@
-module Language.Common.Pretty (Pretty(..), module Text.PrettyPrint.Annotated) where
+module Language.Common.Pretty (Pretty(..), MDoc, module Text.PrettyPrint.Annotated) where
 
 import Text.PrettyPrint.Annotated
 
