@@ -1,4 +1,7 @@
-module Language.Materialization.Parser where
+module Language.Materialization.Parser (
+  runProgramParser,
+  parseErrorPretty
+) where
 
 import Control.Monad (void)
 
@@ -11,10 +14,8 @@ import Language.Materialization.Core
 
 -- Runners
 
-runProgramParser :: String -> Program
-runProgramParser input = case runParser program "<input>" input of
-  Left parseError -> error $ parseErrorPretty parseError
-  Right p -> p
+runProgramParser :: String -> Either (ParseError Char Dec) Program
+runProgramParser = runParser (program <* eof) "<input>"
 
 -- Parsing
 
@@ -22,7 +23,7 @@ program :: Parser Program
 program = sepEndBy clause semi
 
 clause :: Parser Clause
-clause = try pAssignment <|> try pSynchronization <|> try pReturn
+clause = try pAssignment <|> pSynchronization <|> pReturn
  where
   pAssignment = do
     lExpr <- leftExpression
