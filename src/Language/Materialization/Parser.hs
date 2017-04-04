@@ -17,6 +17,9 @@ import Language.Materialization.Core
 runProgramParser :: String -> Either (ParseError Char Dec) Program
 runProgramParser = runParser (program <* eof) "<input>"
 
+forceProgramParser :: String -> Program
+forceProgramParser = either (error . parseErrorPretty) id . runProgramParser
+
 -- Parsing
 
 program :: Parser Program
