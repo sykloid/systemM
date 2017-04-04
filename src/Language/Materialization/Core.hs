@@ -33,7 +33,7 @@ data Clause
 instance Pretty Clause where
   pretty c = case c of
     Assignment lExpr rExpr -> pretty lExpr <+> "=" <+> pretty rExpr
-    Synchronization lExpr -> pretty lExpr <> "?"
+    Synchronization lExpr -> pretty (Synchronizing lExpr)
     Return -> "!"
 
 -- | An expression which may appear on the left-hand side of an assignment.
@@ -45,13 +45,21 @@ instance Pretty LeftExpression where
     Unqualified n -> pretty n
     Qualified lExpr' n -> pretty lExpr' <> "." <> pretty n
 
+data SyncExpression = NonSynchronizing LeftExpression | Synchronizing LeftExpression
+ deriving (Data, Eq, Ord, Read, Show, Typeable)
+
+instance Pretty SyncExpression where
+  pretty sExpr = case sExpr of
+    NonSynchronizing lExpr -> pretty lExpr
+    Synchronizing lExpr -> pretty lExpr <> "?"
+
 -- | An expression which may appear on the right-hand side of an assignment.
 data RightExpression
   -- | Plain values, wrapped with an intent on how to transfer resources.
   = BidExpression Bid
 
   -- | Function application.
-  | Application LeftExpression Bid
+  | Application SyncExpression Bid
 
   -- | Expressions which necessarily create new values.
   | LiteralExpression Literal
@@ -64,7 +72,7 @@ instance Pretty RightExpression where
     LiteralExpression literal -> pretty literal
 
 -- | Bids convey an intent to transfer resources.
-data Bid = Bid LeftExpression BidType
+data Bid = Bid SyncExpression BidType
  deriving (Data, Eq, Ord, Read, Show, Typeable)
 
 instance Pretty Bid where
