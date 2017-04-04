@@ -17,4 +17,4 @@ mP = QuasiQuoter
   }
 
 quoteProgramExp :: String -> TH.Q TH.Exp
-quoteProgramExp s = dataToExpQ (const Nothing) (runProgramParser s)
+quoteProgramExp s = dataToExpQ (const Nothing) (forceProgramParser s)
