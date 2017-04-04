@@ -48,7 +48,8 @@ case_qualifiedNames :: Assertion
 case_qualifiedNames = leftExpression `mustParse` "x.y" @=? Qualified (Unqualified (Name "x")) (Name "y")
 
 case_unqualifiedCopyBid :: Assertion
-case_unqualifiedCopyBid = rightExpression `mustParse` "(x * C)" @=? BidExpression (Bid (Unqualified (Name "x")) Copy)
+case_unqualifiedCopyBid =
+  rightExpression `mustParse` "(x * C)" @=? BidExpression (Bid (NonSynchronizing $ Unqualified (Name "x")) Copy)
 
 case_copyBidType :: Assertion
 case_copyBidType = bidType `mustParse` "C" @=? Copy
