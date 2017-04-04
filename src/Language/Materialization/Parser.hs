@@ -39,11 +39,19 @@ leftExpression :: Parser LeftExpression
 leftExpression = sepBy1 name (lexeme $ char '.') >>= \(uqn:qns) ->
   return $ if null qns then Unqualified uqn else foldl Qualified (Unqualified uqn) qns
 
+syncExpression :: Parser SyncExpression
+syncExpression = do
+  lExpr <- leftExpression
+  sync <- optional (lexeme $ char '?')
+  return $ case sync of
+    Nothing -> NonSynchronizing lExpr
+    Just _ -> Synchronizing lExpr
+
 rightExpression :: Parser RightExpression
-rightExpression = bidExpression <|> literalExpression <|> application
+rightExpression = try bidExpression <|> try literalExpression <|> application
  where
   bidExpression = BidExpression <$> bid <?> "Bid"
-  application = Application <$> leftExpression <*> bid
+  application = Application <$> syncExpression <*> bid
   literalExpression = LiteralExpression <$> literal
 
 literal :: Parser Literal
@@ -70,11 +78,11 @@ abstraction = do
   return (Abstraction formalArg body rt)
 
 bid :: Parser Bid
-bid = between (lexeme $ char '(') (lexeme $ char ')') $ do
-  lExpr <- leftExpression
+bid = do
+  sExpr <- syncExpression
   void (lexeme $ char '*')
   bt <- bidType
-  return (Bid lExpr bt)
+  return (Bid sExpr bt)
 
 captureSpec :: Parser CaptureSpec
 captureSpec = between (lexeme $ char '[') (lexeme $ char ']') (sepEndBy captureSpec1 comma)
@@ -87,7 +95,7 @@ captureSpec = between (lexeme $ char '[') (lexeme $ char ']') (sepEndBy captureS
     return (iName, b)
 
 bidType :: Parser BidType
-bidType = oneOf "CMR" >>= \m -> return $ case m of
+bidType = char 'C' <|> char 'M' <|> char 'R' >>= \m -> return $ case m of
   'C' -> Copy
   'M' -> Move
   'R' -> Refr
