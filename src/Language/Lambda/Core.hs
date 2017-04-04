@@ -47,14 +47,21 @@ toSystemM expr = flip evalState (0 :: Int) $ recursiveToSystemM expr
        result <- M.Unqualified <$> genSym
        (mfp, mfl) <- recursiveToSystemM f
        (mxp, mxl) <- recursiveToSystemM x
-       return (mfp ++ mxp ++ [M.Assignment result (M.Application mfl (M.Bid mxl M.Copy))], result)
+       return ( mfp ++ mxp ++ [M.Assignment result (M.Application (M.Synchronizing mfl) (M.Bid (M.Synchronizing mxl) M.Copy))]
+              , result
+              )
      Abstraction x b -> do
        (mep, mel) <- recursiveToSystemM b
-       let captureSpec = [(M.Name inside, M.Bid (M.Unqualified $ M.Name inside) M.Copy) | inside <- L.delete x (freeVars b)]
+       let captureSpec = [ ( M.Name inside
+                           , M.Bid (M.Synchronizing $ M.Unqualified $ M.Name inside) M.Copy
+                           )
+                         | inside <- L.delete x (freeVars b)
+                         ]
        fName <- M.Unqualified <$> genSym
        return ([M.Assignment fName $
                   M.LiteralExpression (
-                   M.CaptureExpression captureSpec (M.Abstraction (M.Name x) mep (M.BidExpression (M.Bid mel M.Copy))))]
+                   M.CaptureExpression captureSpec (M.Abstraction (M.Name x) mep
+                                                    (M.BidExpression (M.Bid (M.Synchronizing mel) M.Copy))))]
               , fName)
     where
       genSym = do
