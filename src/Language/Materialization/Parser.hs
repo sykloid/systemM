@@ -1,6 +1,21 @@
 module Language.Materialization.Parser (
   runProgramParser,
-  parseErrorPretty
+  forceProgramParser,
+  parseErrorPretty,
+
+  -- * Parsers
+  program,
+  clause,
+
+  leftExpression,
+  syncExpression,
+  rightExpression,
+  literal,
+  abstraction,
+  bid,
+  captureSpec,
+  bidType,
+  name
 ) where
 
 import Control.Monad (void)
@@ -54,7 +69,7 @@ syncExpression = do
 rightExpression :: Parser RightExpression
 rightExpression = try bidExpression <|> try literalExpression <|> application
  where
-  bidExpression = BidExpression <$> bid <?> "Bid"
+  bidExpression = BidExpression <$> bid <?> "bid"
   application = Application <$> syncExpression <*> bid
   literalExpression = LiteralExpression <$> literal
 
@@ -82,7 +97,7 @@ abstraction = do
   return (Abstraction formalArg body rt)
 
 bid :: Parser Bid
-bid = do
+bid = between (lexeme $ char '(') (lexeme $ char ')') $ do
   sExpr <- syncExpression
   void (lexeme $ char '*')
   bt <- bidType
