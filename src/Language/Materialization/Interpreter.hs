@@ -41,6 +41,7 @@ module Language.Materialization.Interpreter (
   HeapValue(..),
 
   -- * Interpretations
+  Configuration(..),
   cfgToEnd,
   cfgToSync,
 )  where
@@ -440,6 +441,9 @@ lookM :: Ord k => Nullable k -> Mapping k v -> Maybe v
 lookM k m = case k of
   Null -> Nothing
   Valid k' -> lookupC k' m
+
+dependentsOf :: IdentAddress -> Store -> Interpretation Namespace
+dependentsOf i s = dependents <$> (lookupC i (idents s) ?? "Bojo")
 
 -- * Interpreters
 
