@@ -142,12 +142,14 @@ instance Monoid InterpretationState where
 class Nillable a where
   nil :: a
 
+newtype ChangesTo a = ChangesTo { fromChanges :: a}
+
 -- | Nillable types which can be patched (i.e. modified from a delta).
 class Nillable a => Patchable a where
   isConcrete :: a -> Bool
-  (<<>) :: a -> a -> a
-  (<++>) :: a -> a -> a
-  (<<*>) :: a -> [a] -> a
+  (<<>) :: a -> ChangesTo a -> a
+  (<++>) :: ChangesTo a -> ChangesTo a -> ChangesTo a
+  (<<*>) :: a -> [ChangesTo a] -> a
   (<<*>) = foldl (<<>)
 
 -- | A maybe-like wrapper, denoting data which might be null, or junk.
@@ -194,9 +196,9 @@ instance Ord k => Nillable (Mapping k v) where
 
 instance Ord k => Patchable (Mapping k v) where
   isConcrete = all isJust -- Haha
-  (<<>) = M.foldrWithKey patch
+  (<<>) c (ChangesTo d) = M.foldrWithKey patch c d
    where patch k mv = M.alter (const $ Just <$> mv) k
-  (<++>) = M.union
+  (<++>) (ChangesTo c) (ChangesTo d) = ChangesTo $ M.union c d
 
 type Namespace = Mapping Name (Nullable (Shareable IdentAddress))
 
@@ -226,8 +228,11 @@ instance Nillable Store where
 
 instance Patchable Store where
   isConcrete (Store e i m) = isConcrete e && isConcrete i && isConcrete m
-  (<<>) (Store e1 i1 m1) (Store e2 i2 m2) = Store (e1 <<> e2) (i1 <<> i2) (m1 <<> m2)
-  (<++>) (Store e1 i1 m1) (Store e2 i2 m2) = Store (e1 <++> e2) (i1 <++> i2) (m1 <++> m2)
+  (<<>) (Store e1 i1 m1) (ChangesTo (Store e2 i2 m2)) = Store (e1 <<> ChangesTo e2) (i1 <<> ChangesTo i2) (m1 <<> ChangesTo m2)
+  (<++>) (ChangesTo (Store e1 i1 m1)) (ChangesTo (Store e2 i2 m2))
+    = ChangesTo $ Store (fromChanges $ ChangesTo e1 <++> ChangesTo e2)
+                        (fromChanges $ ChangesTo i1 <++> ChangesTo i2)
+                        (fromChanges $ ChangesTo m1 <++> ChangesTo m2)
 
 data Environment = Environment { stack :: Stack, globals :: Namespace }
  deriving (Eq, Ord, Read, Show)
@@ -237,8 +242,11 @@ instance Nillable Environment where
 
 instance Patchable Environment where
   isConcrete Environment { .. } = isConcrete stack && isConcrete globals
-  (<<>) (Environment s1 gs1) (Environment s2 gs2) = Environment (s1 <<> s2) (gs1 <<> gs2)
-  (<++>) (Environment s1 gs1) (Environment s2 gs2) = Environment (s1 <++> s2) (gs1 <++> gs2)
+  (<<>) (Environment s1 gs1) (ChangesTo (Environment s2 gs2))
+    = Environment (s1 <<> ChangesTo s2) (gs1 <<> ChangesTo gs2)
+  (<++>) (ChangesTo (Environment s1 gs1)) (ChangesTo (Environment s2 gs2))
+    = ChangesTo $ Environment (fromChanges $ ChangesTo s1 <++> ChangesTo s2)
+                              (fromChanges $ ChangesTo gs1 <++> ChangesTo gs2)
 
 data Ident = Ident
   { dependents :: Namespace
@@ -261,8 +269,10 @@ instance Nillable Memory where
 
 instance Patchable Memory where
   isConcrete Memory { .. } = isConcrete stackMS && isConcrete heapMS
-  (<<>) (Memory s1 h1) (Memory s2 h2) = Memory (s1 <<> s2) (h1 <<> h2)
-  (<++>) (Memory s1 h1) (Memory s2 h2) = Memory (s1 <++> s2) (h1 <++> h2)
+  (<<>) (Memory s1 h1) (ChangesTo (Memory s2 h2)) = Memory (s1 <<> ChangesTo s2) (h1 <<> ChangesTo h2)
+  (<++>) (ChangesTo (Memory s1 h1)) (ChangesTo (Memory s2 h2))
+    = ChangesTo $ Memory (fromChanges $ ChangesTo s1 <++> ChangesTo s2)
+                         (fromChanges $ ChangesTo h1 <++> ChangesTo h2)
 
 type Stack = [Frame]
 
@@ -271,8 +281,9 @@ instance Nillable [a] where
 
 instance Patchable a => Patchable [a] where
   isConcrete = all isConcrete
-  (<<>) = zipWith (<<>)
-  (<++>) = zipWith (<++>)
+  (<<>) xs (ChangesTo cxs) = [x <<> ChangesTo cx | x <- xs | cx <- cxs]
+  (<++>) (ChangesTo cxs1) (ChangesTo cxs2)
+    = ChangesTo [fromChanges $ ChangesTo cx1 <++> ChangesTo cx2 | cx1 <- cxs1 | cx2 <- cxs2]
 
 data Frame = Frame { locals :: Namespace, closure :: Namespace }
  deriving (Eq, Ord, Read, Show)
@@ -282,8 +293,10 @@ instance Nillable Frame where
 
 instance Patchable Frame where
   isConcrete Frame { .. } = isConcrete locals && isConcrete closure
-  (<<>) (Frame ls1 cs1) (Frame ls2 cs2) = Frame (ls1 <<> ls2) (cs1 <<> cs2)
-  (<++>) (Frame ls1 cs1) (Frame ls2 cs2) = Frame (ls1 <++> ls2) (cs1 <++> cs2)
+  (<<>) (Frame ls1 cs1) (ChangesTo (Frame ls2 cs2)) = Frame (ls1 <<> ChangesTo ls2) (cs1 <<> ChangesTo cs2)
+  (<++>) (ChangesTo (Frame ls1 cs1)) (ChangesTo (Frame ls2 cs2))
+    = ChangesTo $ Frame (fromChanges $ ChangesTo ls1 <++> ChangesTo ls2)
+                        (fromChanges $ ChangesTo cs1 <++> ChangesTo cs2)
 
 type Address = Int
 type IdentAddress = Address
@@ -399,15 +412,18 @@ declare lExpr s = case lExpr of
   Qualified prefix suffix -> do
     pIdentAddr <- fromShare <$> resolve prefix s !? AllocationError prefix
     pIdent <- lookupC pIdentAddr (idents s) ?? IdentResolutionError pIdentAddr
-    let dependentsChanges = [(suffix, Just Null)]
-    let storeChanges = nil { idents = [(pIdentAddr, Just pIdent { dependents = dependents pIdent <<> dependentsChanges })]
-                           }
+    let dependentsChanges = ChangesTo [(suffix, Just Null)]
+    let storeChanges =
+          ChangesTo $ nil { idents = [ ( pIdentAddr
+                                       , Just pIdent { dependents = dependents pIdent <<> dependentsChanges
+                                                     })]
+                          }
     return $ s <<> storeChanges
   Unqualified name -> do
     let environmentChanges = case stack $ environment s of
           [] -> nil { globals = [(name, Just Null)] }
           _ -> nil { stack = [Frame [(name, Just Null)] nil] }
-    return $ s <<> nil { environment = environmentChanges }
+    return $ s <<> ChangesTo nil { environment = environmentChanges }
 
 allocate :: LeftExpression -> Store -> Interpretation Store
 allocate lExpr s = do
