@@ -646,4 +646,9 @@ stepOnce ((c:cs) :/: s) = case c of
     v <- inspect i s
     tell [SynchronizationEvent lExpr v]
     return (cs :/: s)
-  Return -> _
+  Return -> do
+    (top, rest) <- case stack $ environment s of
+      [] -> throwE StackReturnError
+      (f:fs) -> return (f, fs)
+    deallocations <- forM [local | (Just (Valid (Owned local))) <- M.elems (locals top)] $ \local -> deallocate local s
+    return (cs :/: s { environment = (environment s) { stack = rest } } <<*> deallocations)
