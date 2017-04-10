@@ -452,6 +452,17 @@ allocate lExpr snIdentAddr s = do
             _ -> nil  { stack = [Frame [(name, Just $ Valid snIdentAddr)] nil] }
       return $ ChangesTo nil { environment = environmentChanges }
 
+deallocate :: IdentAddress -> Store -> Interpretation (ChangesTo Store)
+deallocate iAddr s = do
+  Ident {..} <- lookupC iAddr (idents s) ?? IdentResolutionError iAddr
+  dependentChanges <- sequence [deallocate diAddr s | (Just (Valid (Owned diAddr))) <- M.elems dependents]
+  let localChanges = ChangesTo $ nil { idents = [(iAddr, Nothing)]
+                                     , memory = nil { stackMS = prepareChanges [(stackAddress, Nothing)]
+                                                    , heapMS = prepareChanges [(heapAddress, Nothing)]
+                                                    }
+                                     }
+  return $ foldl1 (<++>) (localChanges:dependentChanges)
+
 lookupC :: Ord k => k -> Mapping k v -> Maybe v
 lookupC k m = if isConcrete m then fromJust <$> M.lookup k m else error "Concrete lookup on non-concrete map."
 
