@@ -497,17 +497,10 @@ stepOnce ((c:cs) :/: s) = case c of
   -- Any non-synchronizing assignment _requires_ that the LHS be declared, at the very least. This
   -- establishes the current scope as the LHS' defining scope.
   Assignment lExpr rExpr -> resolve lExpr s `hushE` NameResolutionError lExpr >>= \case
-
-    -- If the LHS doesn't resolve, declare it now, and redo the assignment.
-    Nothing -> tell [ClauseEvent c "Declaration"] >> ((c:cs) :/:) <$> declare lExpr s
     -- If the LHS doesn't resolve, it needs to be declared _immediately_, at the very least. This
     -- establishes the LHS' defining scope, allowing subsequent allocation (immediately or
     -- otherwise).
-    -- If the LHS resolves, it may still resolve to a @Null@ identity address, indicating that it
--- has been declared but not allocated. Whether this is acceptable depends on the RHS.
--- an assignment by any
-  --   other bid, or of a literal value _requires_ that the LHS be allocated; an application doesn't
---   care (it defers the requirement to the return value assignment).
+    Nothing -> tell [ClauseEvent c "Declaration"] >> ((c:cs) :/:) <$> declare lExpr s
 
     -- Some RHS clauses only require that the LHS resolve, not that it necessarily resolves to
     -- anything meaningful.
@@ -515,7 +508,7 @@ stepOnce ((c:cs) :/: s) = case c of
       -- Function application delegates the allocation (or lack thereof) of the LHS to the
       -- assignment of the return value.
       Application (NonSynchronizing f) x -> do
-        i <- fromShare <$> resolve f s !? NameResolutionError f
+        i <- fromShare <$> resolve f s !? AllocationError f
 
         -- Function application technically only requires _shallow_ inspection, which would allow
         -- closure to be inconsistent. This however, is far to complicated to handle, so deep
