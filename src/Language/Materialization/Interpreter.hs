@@ -598,23 +598,6 @@ stepOnce ((c:cs) :/: s) = case c of
                       | d <- M.keys (dependents rIdent)
                       ]
               return (dependentMaterializations ++ cs :/: s <<> ChangesTo shallowChanges)
-              let storeChanges = nil { idents = [ ( lIdentAddr
-                                                  , Just Ident { dependents = nil
-                                                               , stackAddress = newStackAddr
-                                                               , heapAddress = newHeapAddr
-                                                               }
-                                                  )
-                                                ]
-                                     , memory = nil { stackMS = prepareChanges [ (newStackAddr, mrStackValue)
-                                                                               , (stackAddress lIdent, Nothing)
-                                                                               ]
-                                                    , heapMS = prepareChanges [(newHeapAddr, mrHeapValue)
-                                                                              , (heapAddress lIdent, Nothing)
-                                                                              ]
-                                                    }
-                                     }
-              return (cs :/: s <<> storeChanges)
-
             LiteralExpression (SmallLiteral i) -> do
               tell [ClauseEvent c "Small Literal Asignment"]
               (msv, Null) <- decompose (SmallValue i)
@@ -628,9 +611,36 @@ stepOnce ((c:cs) :/: s) = case c of
                                                 ]
                                      , memory = nil {stackMS = prepareChanges [(Valid newStackAddr, Just msv)]}
                                      }
-              return (cs :/: s <<> storeChanges)
-            LiteralExpression (LargeLiteral _) -> _
-            LiteralExpression (CaptureExpression _ _) -> _
+              return (cs :/: s <<> ChangesTo storeChanges)
+            LiteralExpression (LargeLiteral i) -> do
+              tell [ClauseEvent c "Large Literal Assignment"]
+              (msv, mhv) <- decompose (LargeValue i)
+              newStackAddr <- freshA
+              newHeapAddr <- freshA
+              let storeChanges = nil { idents = [ ( lIdentAddr
+                                                  , Just Ident { dependents = nil
+                                                               , stackAddress = Valid newStackAddr
+                                                               , heapAddress = Valid newHeapAddr
+                                                               }
+                                                  )
+                                                ]
+                                     , memory = nil { stackMS = [(newStackAddr, Just msv)]
+                                                    , heapMS = [(newHeapAddr, Just mhv)]
+                                                    }
+                                     }
+              return (cs :/: s <<> ChangesTo storeChanges)
+            LiteralExpression (CaptureExpression cSpec a) -> do
+              tell [ClauseEvent c "Abstraction Literal Assignment"]
+              (msv, Null) <- decompose (FunctionValue a)
+              newStackAddr <- freshA
+              let storeChanges = nil { idents = [ ( lIdentAddr
+                                                  , Just nil { stackAddress = Valid newStackAddr }
+                                                  )
+                                                ]
+                                     , memory = nil { stackMS = [(newStackAddr, Just msv)]}
+                                     }
+              let captures = [Assignment (Qualified lExpr n) (BidExpression b) | (n, b) <- cSpec]
+              return (captures ++ cs :/: s <<> ChangesTo storeChanges)
   Synchronization lExpr -> do
     i <- fromShare <$> resolve lExpr s !? AllocationError lExpr
     v <- inspect i s
