@@ -25,6 +25,7 @@ library
                        Language.Materialization.Core,
                        Language.Materialization.Interpreter,
                        Language.Materialization.Parser,
+                       Language.Materialization.Transforms.AutoSync,
                        Language.Materialization.Quoter
   build-depends:       base >= 4.7 && < 5,
                        containers,

@@ -4,8 +4,9 @@ import Data.Semigroup
 import Options.Applicative
 
 import Language.Common.Pretty (pretty, render)
-import Language.Materialization.Parser
+import qualified Language.Materialization.Parser as P
 import Language.Materialization.Interpreter
+import Language.Materialization.Transforms.AutoSync
 
 newtype Options = Options
   { sourcePath :: String
@@ -20,10 +21,10 @@ main :: IO ()
 main = do
   options <- execParser programOptionsParser
   source <- readFile (sourcePath options)
-  case runProgramParser source of
-    Left e -> putStrLn $ parseErrorPretty e
+  case P.runParser P.program (sourcePath options) source of
+    Left e -> putStrLn $ P.parseErrorPretty e
     Right r -> do
-      let result = runInterpretation (cfgToEnd $ r :/: nil) mempty
+      let result = runInterpretation (cfgToEnd $ autoSync r :/: nil) mempty
       putStrLn $ render $ pretty result
  where
   programOptionsParser = info (optionsParser <**> helper)
