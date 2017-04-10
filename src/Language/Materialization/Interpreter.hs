@@ -532,11 +532,14 @@ stepOnce ((c:cs) :/: s) = case c of
           -- An assignment of a bid by reference _requires_ that the LHS resolve to a @Null@ identity
           -- address, so that it may associate the LHS with the identity address of the RHS by
           -- borrowing it.
-          BidExpression (Bid _ Refr) -> _
-
+          BidExpression (Bid (NonSynchronizing lExpr') Refr) -> do
+            tell [ClauseEvent c "Assignment by Reference"]
+            lIdent' <- fromShare <$> resolve lExpr' s !? AllocationError lExpr'
+            ds <- allocate lExpr (Borrowed lIdent') s
+            return (cs :/: s <<> ds)
           -- Any other assignment would produce a value to be stored in the identity held by the
           -- LHS, thereby requiring that it be allocated. Allocate it in this case, then redo the assignment.
-          _ -> tell [ClauseEvent c "Allocation"] >> ((c:cs) :/:) <$> allocate lExpr s
+          _ -> tell [ClauseEvent c "Allocation"] >> ((c:cs) :/:) . (s <<>) <$> allocateNew lExpr s
 
         -- For all remaining assignment forms, the ownership status of the LHS identity is
         -- irrelevant, so we may safely unwrap it.
@@ -549,15 +552,52 @@ stepOnce ((c:cs) :/: s) = case c of
             BidExpression (Bid (Synchronizing _) _) -> error "Unreachable"
             Application _ _ -> error "Unreachable"
             -- Reference assignments are ill-formed when the LHS resolves to a non-null identity address.
-            BidExpression (Bid (NonSynchronizing _) Refr) -> throwE "Referencing to an existing identity."
-            BidExpression (Bid (NonSynchronizing _) Move) -> _
-            BidExpression (Bid (NonSynchronizing rName) Copy) -> do
+            BidExpression (Bid (NonSynchronizing rName) m) -> do
               rIdentAddr <- fromShare <$> resolve rName s !? AllocationError rName
               rIdent <- lookupC rIdentAddr (idents s) ?? IdentResolutionError rIdentAddr
-              let mrStackValue = lookM (stackAddress rIdent) (stackMS $ memory s)
-              let mrHeapValue = lookM (heapAddress rIdent) (heapMS $ memory s)
-              newStackAddr <- gFreshA (stackAddress rIdent)
-              newHeapAddr <- gFreshA (heapAddress rIdent)
+              shallowChanges <- case m of
+                Refr -> throwE "Referencing to an existing identity."
+                Move -> do
+                  let mrStackValue = lookM (stackAddress rIdent) (stackMS $ memory s)
+                  newStackAddr <- gFreshA (stackAddress rIdent)
+                  return nil { idents = [ ( lIdentAddr
+                                          , Just lIdent { stackAddress = newStackAddr
+                                                        , heapAddress = heapAddress rIdent
+                                                        }
+                                          )
+                                        , (rIdentAddr, Just rIdent { heapAddress = Null })
+                                        ]
+                             , memory = nil { stackMS = prepareChanges [ (newStackAddr, mrStackValue)
+                                                                       , (stackAddress lIdent, Nothing)
+                                                                       ]
+                                            , heapMS = prepareChanges [(heapAddress lIdent, Nothing)]
+                                            }
+                             }
+                Copy -> do
+                  let mrStackValue = lookM (stackAddress rIdent) (stackMS $ memory s)
+                  let mrHeapValue = lookM (heapAddress rIdent) (heapMS $ memory s)
+                  newStackAddr <- gFreshA (stackAddress rIdent)
+                  newHeapAddr <- gFreshA (heapAddress rIdent)
+                  return nil { idents = [ ( lIdentAddr
+                                          , Just lIdent { stackAddress = newStackAddr
+                                                        , heapAddress = newHeapAddr
+                                                        }
+                                          )
+                                        ]
+                             , memory = nil { stackMS = prepareChanges [ (newStackAddr, mrStackValue)
+                                                                       , (stackAddress lIdent, Nothing)
+                                                                       ]
+                                            , heapMS = prepareChanges [ (newHeapAddr, mrHeapValue)
+                                                                      , (heapAddress lIdent, Nothing)
+                                                                      ]
+                                            }
+                             }
+              let dependentMaterializations
+                    = [ Assignment (Qualified lExpr d)
+                                   (BidExpression (Bid (Synchronizing (Qualified rName d)) m))
+                      | d <- M.keys (dependents rIdent)
+                      ]
+              return (dependentMaterializations ++ cs :/: s <<> ChangesTo shallowChanges)
               let storeChanges = nil { idents = [ ( lIdentAddr
                                                   , Just Ident { dependents = nil
                                                                , stackAddress = newStackAddr
