@@ -425,30 +425,32 @@ declare lExpr s = case lExpr of
           _ -> nil { stack = [Frame [(name, Just Null)] nil] }
     return $ s <<> ChangesTo nil { environment = environmentChanges }
 
-allocate :: LeftExpression -> Store -> Interpretation Store
-allocate lExpr s = do
+allocateNew :: LeftExpression -> Store -> Interpretation (ChangesTo Store)
+allocateNew lExpr s = do
+  nIdentAddr <- freshA
+  ds <- allocate lExpr (Owned nIdentAddr) s
+  return $ ds <++> ChangesTo nil { idents = [(nIdentAddr, Just nil)]}
+
+allocate :: LeftExpression -> Shareable IdentAddress -> Store -> Interpretation (ChangesTo Store)
+allocate lExpr snIdentAddr s = do
   lIdentAddr <- resolve lExpr s
   when (lIdentAddr /= Null) $ throwE "Allocating for already allocated lExpr."
-  nIdentAddr <- freshA
-  nChanges <- case lExpr of
+  case lExpr of
     Qualified prefix suffix -> do
       pIdentAddr <- fromShare <$> resolve prefix s !? AllocationError prefix
       pIdent <- lookupC pIdentAddr (idents s) ?? IdentResolutionError pIdentAddr
-      return $ nil { idents = [ ( pIdentAddr
-                                , Just pIdent { dependents = dependents pIdent
-                                                <<> [(suffix, Just $ Valid $ Owned nIdentAddr)]
-                                              }
-                                )
-                              ]
-                   }
+      return $ ChangesTo nil { idents = [ ( pIdentAddr
+                                          , Just pIdent { dependents = dependents pIdent
+                                                          <<> ChangesTo [(suffix, Just $ Valid snIdentAddr)]
+                                                        }
+                                          )
+                                        ]
+                             }
     Unqualified name -> do
       let environmentChanges = case stack $ environment s of
-            [] -> nil { globals = [(name, Just $ Valid $ Owned nIdentAddr)] }
-            _ -> nil  { stack = [Frame [(name, Just $ Valid $ Owned nIdentAddr)] nil] }
-      return $ nil { environment = environmentChanges }
-  return $ s <<> nChanges
-             <<> nil { idents = [(nIdentAddr, Just nil)]
-                     }
+            [] -> nil { globals = [(name, Just $ Valid snIdentAddr)] }
+            _ -> nil  { stack = [Frame [(name, Just $ Valid snIdentAddr)] nil] }
+      return $ ChangesTo nil { environment = environmentChanges }
 
 lookupC :: Ord k => k -> Mapping k v -> Maybe v
 lookupC k m = if isConcrete m then fromJust <$> M.lookup k m else error "Concrete lookup on non-concrete map."
