@@ -138,3 +138,6 @@ newtype ValueSentinel = ValueSentinel String
 
 instance Pretty ValueSentinel where
   pretty (ValueSentinel i) = text i
+
+instance IsString ValueSentinel where
+  fromString = ValueSentinel
