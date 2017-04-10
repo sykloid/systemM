@@ -32,30 +32,27 @@ tests = testGroup "Parser"
     ]
   ]
 
-mustParse :: Parser a -> String -> a
-mustParse p a = either (error . parseErrorPretty) id (runParser p "<???>" a)
-
 case_emptyProgram :: Assertion
-case_emptyProgram = program `mustParse` "{}" @=? []
+case_emptyProgram = program `forceParser` "" @=? []
 
 case_vanillaNames :: Assertion
-case_vanillaNames = name `mustParse` "x" @=? Name "x"
+case_vanillaNames = name `forceParser` "x" @=? Name "x"
 
 case_unqualifiedNames :: Assertion
-case_unqualifiedNames = leftExpression `mustParse` "x" @=? (Unqualified $ Name "x")
+case_unqualifiedNames = leftExpression `forceParser` "x" @=? (Unqualified $ Name "x")
 
 case_qualifiedNames :: Assertion
-case_qualifiedNames = leftExpression `mustParse` "x.y" @=? Qualified (Unqualified (Name "x")) (Name "y")
+case_qualifiedNames = leftExpression `forceParser` "x.y" @=? Qualified (Unqualified (Name "x")) (Name "y")
 
 case_unqualifiedCopyBid :: Assertion
 case_unqualifiedCopyBid =
-  rightExpression `mustParse` "(x * C)" @=? BidExpression (Bid (NonSynchronizing $ Unqualified (Name "x")) Copy)
+  rightExpression `forceParser` "(x * C)" @=? BidExpression (Bid (NonSynchronizing $ Unqualified (Name "x")) Copy)
 
 case_copyBidType :: Assertion
-case_copyBidType = bidType `mustParse` "C" @=? Copy
+case_copyBidType = bidType `forceParser` "C" @=? Copy
 
 case_moveBidType :: Assertion
-case_moveBidType = bidType `mustParse` "M" @=? Move
+case_moveBidType = bidType `forceParser` "M" @=? Move
 
 case_refrBidType :: Assertion
-case_refrBidType = bidType `mustParse` "R" @=? Refr
+case_refrBidType = bidType `forceParser` "R" @=? Refr
