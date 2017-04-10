@@ -87,7 +87,7 @@ instance (Show a, Pretty a) => Pretty (InterpretationResult a) where
        ] :: [MDoc]
     pr = case r of
       Left e -> pretty e
-      Right a -> fromString $ show a
+      Right a -> pretty a
 
 -- ** Error Reporting
 
@@ -170,9 +170,9 @@ data Nullable x = Null | Valid x
   deriving (Eq, Ord, Read, Show)
 
 instance Pretty a => Pretty (Nullable a) where
-  pretty na = case na of
-    Null -> "Null"
-    Valid a -> "Valid" <+> pretty a
+  pretty = \case
+    Null -> "Φ"
+    Valid p -> pretty p
 
 instance Nillable (Nullable a) where
   nil = Null
@@ -195,6 +195,9 @@ instance MaybeLike (Maybe a) where
 -- borrowed. If sharing status is irrelevant, eliminate with @fromShare@.
 data Shareable x = Owned { fromShare :: x } | Borrowed { fromShare :: x }
   deriving (Eq, Ord, Read, Show)
+
+instance Show x => Pretty (Shareable x) where
+  pretty = text . show
 
 -- * Configuration
 
@@ -231,9 +234,9 @@ instance Pretty Store where
   pretty Store {..} = foldl ($+$) mempty blocks
    where
      blocks :: [MDoc]
-     blocks = [ block '-' "Environment" mempty
-              , block '-' "Idents" mempty
-              , block '-' "Memory" mempty
+     blocks = [ block '-' "Environment" (pretty environment)
+              , block '-' "Idents" (pretty idents)
+              , block '-' "Memory" (pretty memory)
               ]
 
 instance Nillable Store where
@@ -249,6 +252,14 @@ instance Patchable Store where
 
 data Environment = Environment { stack :: Stack, globals :: Namespace }
  deriving (Eq, Ord, Read, Show)
+
+instance Pretty Environment where
+  pretty Environment {..} = foldl ($+$) mempty blocks
+   where
+    blocks :: [MDoc]
+    blocks = [ block '~' "Stack" (pretty stack)
+             , block '~' "Globals" (pretty globals)
+             ]
 
 instance Nillable Environment where
   nil = Environment { stack = nil, globals = nil }
@@ -268,6 +279,11 @@ data Ident = Ident
   }
  deriving (Eq, Ord, Read, Show)
 
+instance Pretty Ident where
+  pretty Ident {..} = "Stack Address:" <+> pretty stackAddress
+                  $+$ "Heap Address:" <+> pretty heapAddress
+                  $+$ guardMP "Dependents:" dependents
+
 instance Nillable Ident where
   nil = Ident { dependents = nil, stackAddress = nil, heapAddress = nil }
 
@@ -276,6 +292,9 @@ data Memory = Memory
   , heapMS :: Mapping HeapAddress (Nullable HeapValue)
   }
  deriving (Eq, Ord, Read, Show)
+
+instance Pretty Memory where
+  pretty Memory {..} = guardMP "Stack:" stackMS $+$ guardMP "Heap:" heapMS
 
 instance Nillable Memory where
   nil = Memory { stackMS = nil, heapMS = nil }
@@ -289,6 +308,12 @@ instance Patchable Memory where
 
 type Stack = [Frame]
 
+instance Pretty Stack where
+  pretty s = foldl ($+$) mempty $ zipWith prettyHelper [0..] s
+   where
+    prettyHelper :: Int -> Frame -> MDoc
+    prettyHelper i f = text (show i ++ ".") <+> pretty f
+
 instance Nillable [a] where
   nil = []
 
@@ -300,6 +325,9 @@ instance Patchable a => Patchable [a] where
 
 data Frame = Frame { locals :: Namespace, closure :: Namespace }
  deriving (Eq, Ord, Read, Show)
+
+instance Pretty Frame where
+  pretty Frame {..} = "Locals:" $+$ nest 2 (pretty locals) $+$ "Closure:" $+$ nest 2 (pretty closure)
 
 instance Nillable Frame where
   nil = Frame { locals = nil, closure = nil }
