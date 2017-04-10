@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -15,6 +16,9 @@ module Language.Materialization.Interpreter (
   InterpretationError(..),
   InterpretationEvent(..),
   runInterpretation,
+
+  (!?),
+  (??),
 
   -- * Wrappers
   Nillable(..),
@@ -44,6 +48,10 @@ module Language.Materialization.Interpreter (
   Configuration(..),
   cfgToEnd,
   cfgToSync,
+
+  -- ** Interpretation Metafunctions
+  inspect,
+  resolve,
 )  where
 
 import Control.Applicative
@@ -91,6 +99,7 @@ data InterpretationError
   | StackResolutionError StackAddress
   | HeapResolutionError HeapAddress
   | RecompositionError (Nullable StackValue) (Nullable HeapValue)
+  | StackReturnError
  deriving (Eq, Ord, Read, Show)
 
 instance IsString InterpretationError where
@@ -105,6 +114,7 @@ instance Pretty InterpretationError where
     StackResolutionError sAddr -> "Stack Resolution Error:" <+> int sAddr
     HeapResolutionError hAddr -> "Heap Resolution Error:" <+> int hAddr
     RecompositionError nsValue nhValue -> "Recomposition Error:" <+> pretty nsValue <+> "and" <+> pretty nhValue
+    StackReturnError -> "Stack Return Error"
 
 hushE :: Interpretation a -> InterpretationError -> Interpretation (Maybe a)
 hushE m e = catchE (Just <$> m) (\e' -> if e == e' then return Nothing else throwE e')
@@ -114,6 +124,9 @@ hushE m e = catchE (Just <$> m) (\e' -> if e == e' then return Nothing else thro
 
 (!?) :: MaybeLike a => Interpretation a -> InterpretationError -> Interpretation (MaybeType a)
 (!?) m e = m >>= (?? e)
+
+infix 5 !?
+infix 5 ??
 
 -- ** Event Logging
 
