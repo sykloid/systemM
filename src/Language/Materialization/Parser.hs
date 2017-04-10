@@ -1,10 +1,12 @@
 module Language.Materialization.Parser (
-  runProgramParser,
-  forceProgramParser,
+  Parser,
+  runParser,
+  forceParser,
   parseErrorPretty,
 
   -- * Parsers
   program,
+  block,
   clause,
 
   leftExpression,
@@ -29,16 +31,16 @@ import Language.Materialization.Core
 
 -- Runners
 
-runProgramParser :: String -> Either (ParseError Char Dec) Program
-runProgramParser = runParser (program <* eof) "<input>"
-
-forceProgramParser :: String -> Program
-forceProgramParser = either (error . parseErrorPretty) id . runProgramParser
+forceParser :: Parser a -> String -> a
+forceParser p = either (error . parseErrorPretty) id . runParser p "<input>"
 
 -- Parsing
 
 program :: Parser Program
-program = sepEndBy clause semi
+program = space *> block <* eof
+
+block :: Parser Program
+block = sepEndBy clause semi
 
 clause :: Parser Clause
 clause = try pAssignment <|> pSynchronization <|> pReturn
@@ -91,7 +93,7 @@ abstraction = do
   void $ lexeme (char '\\')
   formalArg <- name
   void $ optional (lexeme $ char '.')
-  body <- between (lexeme $ char '{') (lexeme $ char '}') program
+  body <- between (lexeme $ char '{') (lexeme $ char '}') block
   void $ lexeme (string "->")
   rt <- rightExpression
   return (Abstraction formalArg body rt)

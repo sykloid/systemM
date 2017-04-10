@@ -1,20 +1,21 @@
-module Language.Materialization.Quoter where
+module Language.Materialization.Quoter (
+  mP,
+  mL
+)
 
-import Data.Generics
+where
+
+import Data.Data
 import qualified Language.Haskell.TH as TH
-import qualified Language.Haskell.TH.Syntax as THS
 import Language.Haskell.TH.Quote
 
-import Language.Materialization.Core
 import Language.Materialization.Parser
 
 mP :: QuasiQuoter
-mP = QuasiQuoter
-  { quoteExp = quoteProgramExp
-  , quotePat = _
-  , quoteDec = _
-  , quoteType = _
-  }
+mP = QuasiQuoter { quoteExp = quotePExp program }
 
-quoteProgramExp :: String -> TH.Q TH.Exp
-quoteProgramExp s = dataToExpQ (const Nothing) (forceProgramParser s)
+quotePExp :: Data a => Parser a -> String -> TH.Q TH.Exp
+quotePExp p s = dataToExpQ (const Nothing) (forceParser p s)
+
+mL :: QuasiQuoter
+mL = QuasiQuoter { quoteExp = quotePExp leftExpression }
