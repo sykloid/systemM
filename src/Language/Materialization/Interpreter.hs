@@ -319,9 +319,16 @@ instance Nillable [a] where
 
 instance Patchable a => Patchable [a] where
   isConcrete = all isConcrete
-  (<<>) xs (ChangesTo cxs) = [x <<> ChangesTo cx | x <- xs | cx <- cxs]
+  (<<>) xs (ChangesTo cxs) = [x <<> ChangesTo cx | (x, cx) <- zipL xs cxs]
   (<++>) (ChangesTo cxs1) (ChangesTo cxs2)
-    = ChangesTo [fromChanges $ ChangesTo cx1 <++> ChangesTo cx2 | cx1 <- cxs1 | cx2 <- cxs2]
+    = ChangesTo [fromChanges $ ChangesTo cx1 <++> ChangesTo cx2 | (cx1, cx2) <- zipL cxs1 cxs2]
+
+zipL :: (Nillable a, Nillable b) => [a] -> [b] -> [(a, b)]
+zipL xs1 xs2 = case (xs1, xs2) of
+  ([], []) -> []
+  ([], x:xs) -> (nil, x): zipL [] xs
+  (x:xs, []) -> (x, nil): zipL xs []
+  (x1:xs1', x2:xs2') -> (x1, x2): zipL xs1' xs2'
 
 data Frame = Frame { locals :: Namespace, closure :: Namespace }
  deriving (Eq, Ord, Read, Show)
