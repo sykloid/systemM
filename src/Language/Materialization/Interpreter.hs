@@ -578,7 +578,7 @@ stepOnce ((c:cs) :/: s) = case c of
                      ] ++ body ++
                      [ Assignment lExpr returnExpr
                      , Return
-                     ] :/: (s { environment = (environment s) { stack = nil : stack (environment s) }})
+                     ] ++ cs :/: (s { environment = (environment s) { stack = nil : stack (environment s) }})
 
           -- This would be more disciplined as a type error.
           _ -> throwE "Application of a non-function."
