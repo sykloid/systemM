@@ -15,11 +15,13 @@ import qualified Data.List as L
 
 import Language.Common
 import Language.Common.Pretty
+import Language.Common.PrimitiveValues
 
 import qualified Language.Materialization.Core as M
 
 data Expression
   = Term String
+  | Primitive PrimitiveValue
   | Application Expression Expression
   | Abstraction String Expression
  deriving (Eq, Ord, Read, Show)
@@ -27,6 +29,7 @@ data Expression
 instance Pretty Expression where
   pretty e = case e of
     Term s -> text s
+    Primitive v -> pretty v
     Application f x ->
       let pf = case f of
                  (Abstraction _ _) -> parens (pretty f)
@@ -43,6 +46,9 @@ toSystemM expr = flip evalState (0 :: Int) $ recursiveToSystemM expr
  where
    recursiveToSystemM e = case e of
      Term i -> return ([], M.Unqualified $ M.Name i)
+     Primitive v -> do
+       vName <- M.Unqualified <$> genSym
+       return ([M.Assignment vName (M.LiteralExpression $ M.PrimitiveLiteral v)], vName)
      Application f x -> do
        result <- M.Unqualified <$> genSym
        (mfp, mfl) <- recursiveToSystemM f
@@ -71,5 +77,6 @@ toSystemM expr = flip evalState (0 :: Int) $ recursiveToSystemM expr
 
       freeVars :: Expression -> [String]
       freeVars (Term i) = [i]
+      freeVars (Primitive _) = []
       freeVars (Application f x) = freeVars f ++ freeVars x
       freeVars (Abstraction x b) = [i | i <- freeVars b, i /= x]
