@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+
 module Language.Materialization.Interpreter.Tests (tests) where
+
+import Control.Exception
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -41,9 +44,11 @@ infix 2 @!!*
 
 -- Run a configuration, get a store, run a query on the store to get an assertion, and assert it.
 (~=>) :: Configuration -> (Store -> Interpretation Assertion) -> Assertion
-(~=>) c f = case runInterpretation (cfgToEnd c >>= f) mempty of
-  ((Right a, _), _) -> a
-  ((Left e, _), _) -> assertFailure (render $ pretty e)
+(~=>) c f = case runInterpretation (cfgToEnd c >>= \s -> f s >>= \r -> return (s, r)) mempty of
+  ((Right (s, a), w), t) -> a
+    `onException` putStrLn (render $ pretty (((Right s, w), t) :: InterpretationResult Store))
+  ((Left e, w), t) -> assertFailure (render $ pretty e)
+    `onException` putStrLn (render $ pretty (((Left e, w), t) :: InterpretationResult Store))
 
 infix 1 ~=>
 
