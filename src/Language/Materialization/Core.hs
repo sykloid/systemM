@@ -11,6 +11,7 @@ import Data.String
 import Text.PrettyPrint.Annotated
 
 import Language.Common.Pretty (Pretty(..))
+import Language.Common.PrimitiveValues
 
 -- | Programs are sequences of clauses, parameterized by a name type.
 type Program = [Clause]
@@ -80,12 +81,7 @@ instance Pretty Bid where
 
 -- | Literal values, categorized by memory characteristics.
 data Literal
-  -- | Small literals only have a stack component.
-  = SmallLiteral ValueSentinel
-
-  -- | Large literals have a stack and a heap component.
-  | LargeLiteral ValueSentinel
-
+  = PrimitiveLiteral PrimitiveValue
   -- | Capturing literals (really only functions) have only a stack component to themselves (a code
   -- pointer), but also have a number of dependents, which may be any kind of value.
   | CaptureExpression CaptureSpec Abstraction
@@ -93,8 +89,7 @@ data Literal
 
 instance Pretty Literal where
   pretty literal = case literal of
-    SmallLiteral i -> "small" <> "-" <> pretty i
-    LargeLiteral i -> "large-" <> "-" <> pretty i
+    PrimitiveLiteral pv -> pretty pv
     CaptureExpression cSpec abstraction -> "\\" <> pretty cSpec <> "." <+> pretty abstraction
 
 data Abstraction = Abstraction Name Program RightExpression
@@ -130,14 +125,3 @@ instance Pretty Name where
 
 instance IsString Name where
   fromString = Name
-
--- | Value sentinels serve to distinguish different values of the same type -- e.g. different small
--- values, different large values, etc.
-newtype ValueSentinel = ValueSentinel String
- deriving (Data, Eq, Ord, Read, Show, Typeable)
-
-instance Pretty ValueSentinel where
-  pretty (ValueSentinel i) = text i
-
-instance IsString ValueSentinel where
-  fromString = ValueSentinel

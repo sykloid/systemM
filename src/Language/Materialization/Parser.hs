@@ -27,6 +27,7 @@ import Text.Megaparsec
 import Text.Megaparsec.String
 
 import Language.Common.Parser
+import Language.Common.PrimitiveValues
 import Language.Materialization.Core
 
 -- Runners
@@ -78,8 +79,8 @@ rightExpression = try bidExpression <|> try literalExpression <|> application
 literal :: Parser Literal
 literal = smallLiteral <|> largeLiteral <|> captureExpression
  where
-  smallLiteral = SmallLiteral <$> (lexeme (string "small") *> lexeme (char '-') *> valueSentinel)
-  largeLiteral = LargeLiteral <$> (lexeme (string "large") *> lexeme (char '-') *> valueSentinel)
+  smallLiteral = PrimitiveLiteral . SmallPrimitive <$> (lexeme (string "small") *> lexeme (char '-') *> valueSentinel)
+  largeLiteral = PrimitiveLiteral . LargePrimitive <$> (lexeme (string "large") *> lexeme (char '-') *> valueSentinel)
   valueSentinel = ValueSentinel <$> some alphaNumChar
   captureExpression = do
     void $ lexeme (char '\\')

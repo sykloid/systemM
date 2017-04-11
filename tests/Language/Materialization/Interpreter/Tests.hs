@@ -9,6 +9,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import Language.Common.Pretty
+import Language.Common.PrimitiveValues
 import Language.Materialization.Core
 import Language.Materialization.Interpreter
 import Language.Materialization.Quoter
@@ -57,10 +58,10 @@ case_syncNonResolving :: Assertion
 case_syncNonResolving = [mP|x?|] :/: nil @!!* NameResolutionError (Unqualified (Name "x"))
 
 case_initializeSmallValue :: Assertion
-case_initializeSmallValue = ([mP|x = small-1|] :/: nil) ~=> [mL|x|] @!=? SmallValue "1"
+case_initializeSmallValue = ([mP|x = small-1|] :/: nil) ~=> [mL|x|] @!=? (ShallowPrimitive $ SmallPrimitive "1")
 
 case_initializeLargeValue :: Assertion
-case_initializeLargeValue = ([mP|x = large-1|] :/: nil) ~=> [mL|x|] @!=? LargeValue "1"
+case_initializeLargeValue = ([mP|x = large-1|] :/: nil) ~=> [mL|x|] @!=? (ShallowPrimitive $ LargePrimitive "1")
 
 case_initializeFunctionValue :: Assertion
 case_initializeFunctionValue = ([mP|x = \[]. \y. {} -> (y? * C)|] :/: nil) ~=>
@@ -70,15 +71,15 @@ case_initializeFunctionValue = ([mP|x = \[]. \y. {} -> (y? * C)|] :/: nil) ~=>
 case_smallCapture :: Assertion
 case_smallCapture = [mP| q = small-1
                        ; x = \[z = (q? * C)]. \y. {} -> \[]. \w. {} -> (z? * C)
-                        |] :/: nil ~=> [mL|x.z|] @!=? SmallValue "1"
+                        |] :/: nil ~=> [mL|x.z|] @!=? (ShallowPrimitive $ SmallPrimitive "1")
 
 case_multiCapture :: Assertion
 case_multiCapture = [mP| q1 = small-1; q2 = large-1
                        ; f = \[w1 = (q1? * C), w2 = (q2? * C)]. \y. {} -> (w2 * C)
-                       |] :/: nil ~=> [mL|f.w2|] @!=? LargeValue "1"
+                       |] :/: nil ~=> [mL|f.w2|] @!=? (ShallowPrimitive $ LargePrimitive "1")
 
 case_identityApplication :: Assertion
 case_identityApplication = [mP| id = \[]. \x. {} -> (x * C)
                               ; y = small-1
                               ; z = id (y * C)
-                              |] :/: nil ~=> [mL|z|] @!=? SmallValue "1"
+                              |] :/: nil ~=> [mL|z|] @!=? (ShallowPrimitive $ SmallPrimitive "1")

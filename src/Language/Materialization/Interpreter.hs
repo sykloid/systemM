@@ -2,7 +2,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -67,6 +66,7 @@ import Data.String
 
 import Language.Materialization.Core
 import Language.Common.Pretty hiding ((<>))
+import Language.Common.PrimitiveValues
 
 -- * Interpretation Machinery
 
@@ -359,13 +359,7 @@ type HeapAddress = Address
 -- | Shallow values do not include captured values; determining a name's shallow value does not
 -- require forcing all of its components.
 data ShallowValue
-  -- | Small values are statically sized, and can be stack allocated in their entirety.
-  = SmallValue ValueSentinel
-
-  -- | Large values have a statically sized component which can be stack allocated, as well as a
-  -- dynamically sized component which must be heap allocated.
-  | LargeValue ValueSentinel
-
+  = ShallowPrimitive PrimitiveValue
   -- | Function values have a statically sized code component (think function pointer); and do not
   -- themselves have a dynamically sized heap component.
   | FunctionValue Abstraction
@@ -373,9 +367,8 @@ data ShallowValue
 
 instance Pretty ShallowValue where
   pretty v = case v of
-    SmallValue vs -> "small-" <> pretty vs
-    LargeValue vs -> "large-" <> pretty vs
-    FunctionValue a -> "function-" <> braces (pretty a)
+    ShallowPrimitive p -> pretty p
+    FunctionValue a -> "function" <> braces (pretty a)
 
 -- | Deep values consist of a shallow value, as well as a mapping of captured dependent names to
 -- their own corresponding deep values. Inspecting a deep value forces all associated captures,
@@ -389,7 +382,7 @@ instance Pretty StackValue where
   pretty sv = case sv of
     SmallStackValue vs -> "small-" <> pretty vs <> "-stack"
     LargeStackValue vs -> "large-" <> pretty vs <> "-stack"
-    FunctionStackValue as -> "stack-abstraction" <> parens (pretty as)
+    FunctionStackValue as -> "function" <> parens (pretty as) <> "-stack"
 
 newtype HeapValue = LargeHeapValue ValueSentinel
  deriving (Eq, Ord, Read, Show)
@@ -407,15 +400,15 @@ instance Pretty HeapValue where
 -- | Decompose a value into its stack and heap components.
 decompose :: ShallowValue -> Interpretation (Nullable StackValue, Nullable HeapValue)
 decompose lit = return $ case lit of
-  SmallValue v -> (Valid (SmallStackValue v), Null)
-  LargeValue v -> (Valid (LargeStackValue v), Valid (LargeHeapValue v))
+  ShallowPrimitive (SmallPrimitive vs) -> (Valid (SmallStackValue vs), Null)
+  ShallowPrimitive (LargePrimitive vs) -> (Valid (LargeStackValue vs), Valid (LargeHeapValue vs))
   FunctionValue a -> (Valid (FunctionStackValue a), Null)
 
 -- | Recompose a pair of stack/heap values into (possibly) a regular value.
 recompose :: (Nullable StackValue, Nullable HeapValue) -> Interpretation ShallowValue
 recompose (msv, mhv) = case (msv, mhv) of
-  (Valid (SmallStackValue v), Null) -> return $ SmallValue v
-  (Valid (LargeStackValue v), Valid (LargeHeapValue v')) | v == v' -> return $ LargeValue v
+  (Valid (SmallStackValue v), Null) -> return $ ShallowPrimitive (SmallPrimitive v)
+  (Valid (LargeStackValue v), Valid (LargeHeapValue v')) | v == v' -> return $ ShallowPrimitive (LargePrimitive v)
   (Valid (FunctionStackValue a), Null) -> return $ FunctionValue a
   _ -> throwE $ RecompositionError msv mhv
 
@@ -664,9 +657,9 @@ stepOnce ((c:cs) :/: s) = case c of
                       | d <- M.keys (dependents rIdent)
                       ]
               return (dependentMaterializations ++ cs :/: s <<> ChangesTo shallowChanges)
-            LiteralExpression (SmallLiteral i) -> do
+            LiteralExpression (PrimitiveLiteral (SmallPrimitive i)) -> do
               logClause c s "Small Literal Asignment"
-              (msv, Null) <- decompose (SmallValue i)
+              (msv, Null) <- decompose (ShallowPrimitive $ SmallPrimitive i)
               newStackAddr <- freshA
               let storeChanges = nil { idents = [ ( lIdentAddr
                                                   , Just Ident { dependents = nil
@@ -678,9 +671,9 @@ stepOnce ((c:cs) :/: s) = case c of
                                      , memory = nil {stackMS = prepareChanges [(Valid newStackAddr, Just msv)]}
                                      }
               return (cs :/: s <<> ChangesTo storeChanges)
-            LiteralExpression (LargeLiteral i) -> do
+            LiteralExpression (PrimitiveLiteral (LargePrimitive i)) -> do
               logClause c s "Large Literal Assignment"
-              (msv, mhv) <- decompose (LargeValue i)
+              (msv, mhv) <- decompose (ShallowPrimitive $ LargePrimitive i)
               newStackAddr <- freshA
               newHeapAddr <- freshA
               let storeChanges = nil { idents = [ ( lIdentAddr

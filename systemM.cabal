@@ -20,6 +20,7 @@ library
   exposed-modules:     Language.Common,
                        Language.Common.Parser,
                        Language.Common.Pretty,
+                       Language.Common.PrimitiveValues,
                        Language.Lambda.Core,
                        Language.Lambda.Parser,
                        Language.Materialization.Core,
