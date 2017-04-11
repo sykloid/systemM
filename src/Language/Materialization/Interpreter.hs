@@ -494,11 +494,14 @@ allocate lExpr snIdentAddr s = do
                                           )
                                         ]
                              }
-    Unqualified name -> do
-      let environmentChanges = case stack $ environment s of
-            [] -> nil { globals = [(name, Just $ Valid snIdentAddr)] }
-            _ -> nil  { stack = [Frame [(name, Just $ Valid snIdentAddr)] nil] }
-      return $ ChangesTo nil { environment = environmentChanges }
+    Unqualified name -> return $ ChangesTo nil { environment = allocateInEnvironment name snIdentAddr (environment s) }
+ where
+  allocateInEnvironment :: Name -> Shareable IdentAddress -> Environment -> Environment
+  allocateInEnvironment n siad e = case stack e of
+    [] -> nil { globals = [(n, Just $ Valid siad )] }
+    (f:fs) | isJust (lookupC n (locals f)) -> nil { stack = [nil { locals = [(n, Just $ Valid siad)] }] }
+           | otherwise -> let e' = allocateInEnvironment n siad e { stack = fs }
+                          in e' { stack = nil: stack e' }
 
 deallocate :: IdentAddress -> Store -> Interpretation (ChangesTo Store)
 deallocate iAddr s = do
