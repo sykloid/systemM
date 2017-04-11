@@ -77,11 +77,9 @@ rightExpression = try bidExpression <|> try literalExpression <|> application
   literalExpression = LiteralExpression <$> literal
 
 literal :: Parser Literal
-literal = smallLiteral <|> largeLiteral <|> captureExpression
+literal = primitiveLiteral <|> captureExpression
  where
-  smallLiteral = PrimitiveLiteral . SmallPrimitive <$> (lexeme (string "small") *> lexeme (char '-') *> valueSentinel)
-  largeLiteral = PrimitiveLiteral . LargePrimitive <$> (lexeme (string "large") *> lexeme (char '-') *> valueSentinel)
-  valueSentinel = ValueSentinel <$> some alphaNumChar
+  primitiveLiteral = PrimitiveLiteral <$> primitiveValue
   captureExpression = do
     void $ lexeme (char '\\')
     cSpec <- captureSpec

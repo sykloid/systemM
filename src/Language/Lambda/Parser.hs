@@ -27,7 +27,10 @@ expression = makeExprParser nonApp [[appOp]]
   appOp = InfixL $ return Application
 
   nonApp :: Parser Expression
-  nonApp = lexeme $ term <|> abstraction <|> (between (lexeme $ char '(') (lexeme $ char ')') expression)
+  nonApp = lexeme $ primitive <|> term <|> abstraction <|> between (lexeme $ char '(') (lexeme $ char ')') expression
+
+  primitive :: Parser Expression
+  primitive = Primitive <$> primitiveValue
 
   term :: Parser Expression
   term = Term <$> some alphaNumChar
