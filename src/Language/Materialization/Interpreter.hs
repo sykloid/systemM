@@ -131,14 +131,17 @@ infix 5 ??
 -- ** Event Logging
 
 data InterpretationEvent
-  = ClauseEvent Clause String
+  = ClauseEvent Clause Store String
   | SynchronizationEvent LeftExpression ShallowValue
  deriving (Eq, Ord, Read, Show)
 
 instance Pretty InterpretationEvent where
   pretty ie = case ie of
-    ClauseEvent c comment -> pretty c <+> ":" <+> fromString comment
+    ClauseEvent c s comment -> block '*' (pretty c <+> ":" <+> fromString comment) (pretty s)
     SynchronizationEvent lExpr v -> pretty lExpr <+> "synchronized as" <+> pretty v
+
+logClause :: Clause -> Store -> String -> Interpretation ()
+logClause c s cm = tell [ClauseEvent c s cm]
 
 -- ** Interpreter State
 
@@ -562,7 +565,7 @@ stepOnce ((c:cs) :/: s) = case c of
     -- If the LHS doesn't resolve, it needs to be declared _immediately_, at the very least. This
     -- establishes the LHS' defining scope, allowing subsequent allocation (immediately or
     -- otherwise).
-    Nothing -> tell [ClauseEvent c "Declaration"] >> ((c:cs) :/:) <$> declare lExpr s
+    Nothing -> logClause c s "Declaration" >> ((c:cs) :/:) <$> declare lExpr s
 
     -- Some RHS clauses only require that the LHS resolve, not that it necessarily resolves to
     -- anything meaningful.
@@ -570,6 +573,7 @@ stepOnce ((c:cs) :/: s) = case c of
       -- Function application delegates the allocation (or lack thereof) of the LHS to the
       -- assignment of the return value.
       Application (NonSynchronizing f) x -> do
+        logClause c s "Application"
         i <- fromShare <$> resolve f s !? AllocationError f
 
         -- Function application technically only requires _shallow_ inspection, which would allow
@@ -595,13 +599,13 @@ stepOnce ((c:cs) :/: s) = case c of
           -- address, so that it may associate the LHS with the identity address of the RHS by
           -- borrowing it.
           BidExpression (Bid (NonSynchronizing lExpr') Refr) -> do
-            tell [ClauseEvent c "Assignment by Reference"]
+            logClause c s "Assignment by Reference"
             lIdent' <- fromShare <$> resolve lExpr' s !? AllocationError lExpr'
             ds <- allocate lExpr (Borrowed lIdent') s
             return (cs :/: s <<> ds)
           -- Any other assignment would produce a value to be stored in the identity held by the
           -- LHS, thereby requiring that it be allocated. Allocate it in this case, then redo the assignment.
-          _ -> tell [ClauseEvent c "Allocation"] >> ((c:cs) :/:) . (s <<>) <$> allocateNew lExpr s
+          _ -> logClause c s "Allocation" >> ((c:cs) :/:) . (s <<>) <$> allocateNew lExpr s
 
         -- For all remaining assignment forms, the ownership status of the LHS identity is
         -- irrelevant, so we may safely unwrap it.
@@ -661,7 +665,7 @@ stepOnce ((c:cs) :/: s) = case c of
                       ]
               return (dependentMaterializations ++ cs :/: s <<> ChangesTo shallowChanges)
             LiteralExpression (SmallLiteral i) -> do
-              tell [ClauseEvent c "Small Literal Asignment"]
+              logClause c s "Small Literal Asignment"
               (msv, Null) <- decompose (SmallValue i)
               newStackAddr <- freshA
               let storeChanges = nil { idents = [ ( lIdentAddr
@@ -675,7 +679,7 @@ stepOnce ((c:cs) :/: s) = case c of
                                      }
               return (cs :/: s <<> ChangesTo storeChanges)
             LiteralExpression (LargeLiteral i) -> do
-              tell [ClauseEvent c "Large Literal Assignment"]
+              logClause c s "Large Literal Assignment"
               (msv, mhv) <- decompose (LargeValue i)
               newStackAddr <- freshA
               newHeapAddr <- freshA
@@ -692,7 +696,7 @@ stepOnce ((c:cs) :/: s) = case c of
                                      }
               return (cs :/: s <<> ChangesTo storeChanges)
             LiteralExpression (CaptureExpression cSpec a) -> do
-              tell [ClauseEvent c "Abstraction Literal Assignment"]
+              logClause c s "Abstraction Literal Assignment"
               (msv, Null) <- decompose (FunctionValue a)
               newStackAddr <- freshA
               let storeChanges = nil { idents = [ ( lIdentAddr
@@ -709,6 +713,7 @@ stepOnce ((c:cs) :/: s) = case c of
     tell [SynchronizationEvent lExpr v]
     return (cs :/: s)
   Return -> do
+    logClause c s "Return"
     (top, rest) <- case stack $ environment s of
       [] -> throwE StackReturnError
       (f:fs) -> return (f, fs)
