@@ -21,6 +21,7 @@ tests = testGroup "Interpreter"
   , testCase "Initialization of Function Values" case_initializeFunctionValue
   , testCase "Capture of Small Values" case_smallCapture
   , testCase "Capture of Multiple Values" case_multiCapture
+  , testCase "Identity Application" case_identityApplication
   ]
 
 (@!?) :: Configuration -> (InterpretationResult Store -> Assertion) -> Assertion
@@ -67,11 +68,17 @@ case_initializeFunctionValue = ([mP|x = \[]. \y. {} -> (y? * C)|] :/: nil) ~=>
                 (BidExpression $ Bid (Synchronizing $ Unqualified $ Name "y") Copy))
 
 case_smallCapture :: Assertion
-case_smallCapture = [mP| q = small-1;
-                         x = \[z = (q? * C)]. \y. {} -> \[]. \w. {} -> (z? * C)
+case_smallCapture = [mP| q = small-1
+                       ; x = \[z = (q? * C)]. \y. {} -> \[]. \w. {} -> (z? * C)
                         |] :/: nil ~=> [mL|x.z|] @!=? SmallValue "1"
 
 case_multiCapture :: Assertion
-case_multiCapture = [mP| q1 = small-1; q2 = large-1;
-                         f = \[w1 = (q1? * C), w2 = (q2? * C)]. \y. {} -> (w2 * C)
+case_multiCapture = [mP| q1 = small-1; q2 = large-1
+                       ; f = \[w1 = (q1? * C), w2 = (q2? * C)]. \y. {} -> (w2 * C)
                        |] :/: nil ~=> [mL|f.w2|] @!=? LargeValue "1"
+
+case_identityApplication :: Assertion
+case_identityApplication = [mP| id = \[]. \x. {} -> (x * C)
+                              ; y = small-1
+                              ; z = id (y * C)
+                              |] :/: nil ~=> [mL|z|] @!=? SmallValue "1"
