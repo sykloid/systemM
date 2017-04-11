@@ -17,8 +17,8 @@ type MDoc = Doc MAnn
 class Pretty a where
   pretty :: a -> MDoc
 
-block :: Char -> String -> MDoc -> MDoc
-block c t d = text (replicate 3 c) <+> text t <+> text (replicate 3 c) $+$ d
+block :: Char -> MDoc -> MDoc -> MDoc
+block c t d = text (replicate 3 c) <+> t <+> text (replicate 3 c) $+$ d
 
 instance Pretty Int where
   pretty = int

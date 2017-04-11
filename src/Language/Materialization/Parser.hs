@@ -40,10 +40,10 @@ program :: Parser Program
 program = space *> block <* eof
 
 block :: Parser Program
-block = sepEndBy clause semi
+block = sepEndBy clause (lexeme semi)
 
 clause :: Parser Clause
-clause = try pAssignment <|> pSynchronization <|> pReturn
+clause = (try pAssignment <|> pSynchronization <|> pReturn) <* space
  where
   pAssignment = do
     lExpr <- leftExpression
