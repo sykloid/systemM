@@ -718,4 +718,4 @@ stepOnce ((c:cs) :/: s) = case c of
       [] -> throwE StackReturnError
       (f:fs) -> return (f, fs)
     deallocations <- forM [local | (Just (Valid (Owned local))) <- M.elems (locals top)] $ \local -> deallocate local s
-    return (cs :/: s { environment = (environment s) { stack = rest } } <<*> deallocations)
+    return (cs :/: (s <<*> deallocations) { environment = (environment s) { stack = rest } })
