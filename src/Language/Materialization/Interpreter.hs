@@ -24,6 +24,7 @@ module Language.Materialization.Interpreter (
   Patchable(..),
   Nullable(..),
   Shareable(..),
+  Mapping,
 
   -- * Simulation Types
   Store(..),
@@ -37,6 +38,7 @@ module Language.Materialization.Interpreter (
   IdentAddress,
   StackAddress,
   HeapAddress,
+  Namespace,
 
   ShallowValue(..),
   DeepValue(..),
