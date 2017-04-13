@@ -10,6 +10,7 @@ import qualified Language.Lambda.Parser as LP
 import qualified Language.Materialization.Core as MC
 import qualified Language.Materialization.Parser as P
 import Language.Materialization.Interpreter
+import Language.Materialization.Interpreter.Diagrams
 import Language.Materialization.Transforms.AutoSync
 
 newtype Options = Options
@@ -17,9 +18,9 @@ newtype Options = Options
   }
 
 data Mode
-  = InterpretSystemM { sourcePath :: String }
-  | TranslateLambda { sourcePath :: String }
-  | ParseLambda { sourcePath :: String }
+  = InterpretSystemM { diagramPath :: FilePath, sourcePath :: FilePath }
+  | TranslateLambda { sourcePath :: FilePath }
+  | ParseLambda { sourcePath :: FilePath }
 
 optionsParser :: Parser Options
 optionsParser = do
@@ -30,7 +31,15 @@ optionsParser = do
   pure Options { mode = mode }
 
 interpretSystemM :: Parser Mode
-interpretSystemM = InterpretSystemM <$> argument str (metavar "PATH")
+interpretSystemM = do
+  sourcePath' <- argument str (metavar "PATH")
+  diagramPath' <- strOption
+    ( long "diagram-path"
+   <> short 'D'
+   <> help "Path to put diagrams in."
+   <> metavar "PATH"
+    )
+  pure $ InterpretSystemM diagramPath' sourcePath'
 
 translateLambda :: Parser Mode
 translateLambda = TranslateLambda <$> argument str (metavar "PATH")
@@ -47,6 +56,7 @@ dispatchForMode opt = case mode opt of
         Right r -> do
           let result = runInterpretation (cfgToEnd $ autoSync r :/: nil) mempty
           putStrLn $ render $ pretty result
+          visualizeResult result diagramPath
   TranslateLambda {..} -> do
     source <- readFile sourcePath
     case P.runParser LP.expression sourcePath source of

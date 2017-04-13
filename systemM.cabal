@@ -25,25 +25,39 @@ library
                        Language.Lambda.Parser,
                        Language.Materialization.Core,
                        Language.Materialization.Interpreter,
+                       Language.Materialization.Interpreter.Diagrams,
+                       Language.Materialization.Interpreter.Diagrams.Text,
                        Language.Materialization.Parser,
                        Language.Materialization.Transforms.AutoSync,
                        Language.Materialization.Quoter
   build-depends:       base >= 4.7 && < 5,
                        containers,
+                       diagrams-contrib,
+                       diagrams-core,
+                       diagrams-lib,
+                       diagrams-pgf,
+                       directory,
                        errors,
+                       filepath,
                        megaparsec,
                        mtl,
                        pretty,
+                       process,
                        syb,
-                       template-haskell
+                       template-haskell,
+                       temporary
   default-language:    Haskell2010
 
 executable systemM
   main-is: systemM.hs
   hs-source-dirs: cli
   build-depends: base >= 4.7 && < 5,
+                 filepath,
+                 directory,
                  optparse-applicative,
-                 systemM
+                 process,
+                 systemM,
+                 unix
 
 test-suite test
   default-language: Haskell2010
