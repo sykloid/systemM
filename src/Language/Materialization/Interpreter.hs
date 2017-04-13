@@ -567,18 +567,15 @@ stepOnce ((c:cs) :/: s) = case c of
       -- assignment of the return value.
       Application (NonSynchronizing f) x -> do
         logClause c s "Application"
-        i <- fromShare <$> resolve f s !? AllocationError f
-
-        -- Function application technically only requires _shallow_ inspection, which would allow
-        -- closure to be inconsistent. This however, is far to complicated to handle, so deep
-        -- synchronization it is.
-        inspect i s >>= \case
+        fIdentAddr <- fromShare <$> resolve f s !? AllocationError f
+        fDeps <- dependents <$> lookupC fIdentAddr (idents s) ?? IdentResolutionError fIdentAddr
+        inspect fIdentAddr s >>= \case
           FunctionValue (Abstraction formalName body returnExpr) ->
             return $ [ Assignment (Unqualified formalName) (BidExpression x)
                      ] ++ body ++
                      [ Assignment lExpr returnExpr
                      , Return
-                     ] ++ cs :/: (s { environment = (environment s) { stack = nil : stack (environment s) }})
+                     ] ++ cs :/: (s { environment = (environment s) { stack = nil { closure = fDeps }: stack (environment s) }})
 
           -- This would be more disciplined as a type error.
           _ -> throwE "Application of a non-function."
