@@ -4,7 +4,7 @@
 import Data.Semigroup
 import Options.Applicative
 
-import Language.Common.Pretty (pretty, render)
+import Language.Common.Pretty (pretty, renderPretty)
 import qualified Language.Lambda.Core as LC
 import qualified Language.Lambda.Parser as LP
 import qualified Language.Materialization.Core as MC
@@ -66,12 +66,12 @@ dispatchForMode opt = case mode opt of
       Right e -> let (p, lExpr) = LC.toSystemM e
                      p' = p ++ [MC.Synchronization lExpr]
                      result = runInterpretation (cfgToEnd $ autoSync p' :/: nil) mempty
-                 in putStrLn (render $ pretty p') >> putStrLn (render $ pretty result)
+                 in putStrLn (renderPretty $ pretty p') >> putStrLn (renderPretty $ pretty result)
   ParseLambda {..} -> do
     source <- readFile sourcePath
     case P.runParser LP.expression sourcePath source of
       Left parseError -> putStrLn $ P.parseErrorPretty parseError
-      Right e -> putStrLn $ render $ pretty e
+      Right e -> putStrLn $ renderPretty $ pretty e
 
 main :: IO ()
 main = execParser programOptionsParser >>= dispatchForMode
