@@ -18,7 +18,7 @@ newtype Options = Options
   }
 
 data Mode
-  = InterpretSystemM { diagramPath :: FilePath, sourcePath :: FilePath }
+  = InterpretSystemM { diagramPath :: Maybe FilePath, sourcePath :: FilePath }
   | TranslateLambda { sourcePath :: FilePath }
   | ParseLambda { sourcePath :: FilePath }
 
@@ -33,7 +33,7 @@ optionsParser = do
 interpretSystemM :: Parser Mode
 interpretSystemM = do
   sourcePath' <- argument str (metavar "PATH")
-  diagramPath' <- strOption
+  diagramPath' <- optional $ strOption
     ( long "diagram-path"
    <> short 'D'
    <> help "Path to put diagrams in."
@@ -55,8 +55,10 @@ dispatchForMode opt = case mode opt of
         Left e -> putStrLn $ P.parseErrorPretty e
         Right r -> do
           let result = runInterpretation (cfgToEnd $ autoSync r :/: nil) mempty
-          putStrLn $ render $ pretty result
-          visualizeResult result diagramPath
+          putStrLn $ renderPretty $ pretty result
+          case diagramPath of
+            Nothing -> return ()
+            Just dP -> visualizeResult result dP
   TranslateLambda {..} -> do
     source <- readFile sourcePath
     case P.runParser LP.expression sourcePath source of
